@@ -1,9 +1,9 @@
 #ifndef PROGRAM_TABLES_V2_H_INCLUDED
 #define PROGRAM_TABLES_V2_H_INCLUDED
 
-#include "var_table.h"
+#include "program/var_table.h"
 #include "lib/bintree.h"
-#include "program_structure.h"
+#include "program/program_structure.h"
 
 enum tableType_t {
     TABLE_T_NULL = 0,

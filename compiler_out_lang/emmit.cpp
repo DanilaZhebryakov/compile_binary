@@ -110,6 +110,8 @@ bool emmitTableSectVar(CompilationOutput* out, char* name, size_t vsize, char* s
         return false;
     if (!expandCompilationOutput(out, sect_name, sect_name_len + 1))
         return false;
+    if (!EXPAND_COMPILATION_OUTPUT(out, &vsize))
+        return false;
     return expandCompilationOutput(out, set_data, set_size);
 }
 bool emmitAddSection(CompilationOutput* out, char* name, BinSectionAttr attr) {

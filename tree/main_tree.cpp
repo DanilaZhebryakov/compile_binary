@@ -1,8 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "compile_backend_old.h"
-#include "compile_backend_v2.h"
+#include "compile_backend.h"
 #include "compiler_out_lang/compiler_out_dump.h"
 
 #include "expr/formule_utils.h"
@@ -12,20 +11,18 @@
 #include "misc_default_vals.h"
 
 const char* const help_str = 
-"The ;⸵⁉ compiler back-end utility\n"
+"The ;⸵⁉ compiler binary back-end utility\n"
 "Options:\n"
 "-f <filename> [out filename] : specify a file. Multiple files can be specified\n"
 "If no output filename is specified, it is the same as input, but with \"" LANG_TREE_PRE_FILE_EXTENSION "\" extension\n"
 "If no files are specified, defaults to \"" LANG_TREE_PRE_DEFAULT_FILE "\" \n"
 "-D  : Dump output. Print output in text format to stdout. Useful for debugging\n"
-"-L  : Legacy mode. Use old backend to generate stack asm output\n"
 "-S  : use stdin and stdout as in and out files \n"
 DEFAULT_ARG_DESCRIPTION
 ;
 
 struct BackendRunFlags{
     bool out_dump:1;
-    bool old_mode:1;
 };
 
 int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
@@ -37,23 +34,15 @@ int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
     }
     binTreeDump(prog);
 
-    if (flags.old_mode){
-        if (!compileProgram_old(out_file, prog)){
-            IF_NQ(fprintf(stderr,"Compilation errors occured\n");)
-        }
+    CompilationOutput cmp_out;
+    compilationOutputCtor(&cmp_out);
+    if (!compileProgram(&cmp_out, prog)){
+        IF_NQ(fprintf(stderr,"Compilation errors occured\n");)
     }
-    else{
-        CompilationOutput cmp_out;
-        compilationOutputCtor(&cmp_out);
-        if (!compileProgram(&cmp_out, prog)){
-            IF_NQ(fprintf(stderr,"Compilation errors occured\n");)
-        }
-        if (flags.out_dump){
-            printCompilerOutput(stdout, &cmp_out);
-        }
-        compilationOutputDtor(&cmp_out);
+    if (flags.out_dump){
+        printCompilerOutput(stdout, &cmp_out);
     }
-
+    compilationOutputDtor(&cmp_out);
 
     binTreeDtor(prog);
     return 0;
@@ -104,7 +93,6 @@ int main(int argc, const char* argv[]){
     BackendRunFlags flags = {};
 
     flags.out_dump = parseArgBegin(argc, argv, "-D") >= 0;
-    flags.old_mode = parseArgBegin(argc, argv, "-L") >= 0;
     
     int file_counter = 0;
 
