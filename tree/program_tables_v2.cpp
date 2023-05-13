@@ -5,6 +5,21 @@ const int tbl_entry_format_version = 1;
 DEF_VAR_TABLE(Var  , var  , VarData )
 DEF_VAR_TABLE(Func , func , FuncData)
 
+bool valCntMatchesInt(funcValCnt_t val, int n){
+    switch (val)
+    {
+        case VF_VAL_NONE:
+            return n == 0;
+        case VF_VAL_SINGLE:
+            return n == 1;
+        case VF_VAL_MULTI:
+        case VF_VAL_COUNT:
+            return true;    
+        default:
+            return false;
+    }
+}
+
 int varTableGetNewAddr(VarTable* stk){
     if (stk->size == 0){
         return 1;
@@ -18,7 +33,9 @@ void programNameTableCtor(ProgramNameTable* table){
     table->funcs  = (VarTable*)malloc(sizeof(*table->funcs));
 
     varTableCtor(table->vars);
-    varTableCtor(table->funcs);
+    funcTableCtor(table->funcs);
+    varTablePut (table->vars , {{"!", 0, 0}, "!0base!", 0, 0});
+    funcTablePut(table->funcs, {{"!", "!"}, "!0base!", 0, 0});
 }
 
 void programNameTableDtor(ProgramNameTable* table){
@@ -29,11 +46,17 @@ void programNameTableDtor(ProgramNameTable* table){
     free(table->funcs);
 }
 
-void programDescendLvl(ProgramNameTable* objs, ProgramPosData* pos, int lvl){
-    varTableDescendLvl  (objs->vars   , lvl);
+bool programAscendLvl(ProgramNameTable* objs, ProgramPosData* pos){
+    return varTablePut (objs->vars , {{"!",0, pos->rbp_offset}, "!base!", pos->lvl, pos->flvl});
+}
+
+bool programDescendLvl(ProgramNameTable* objs, ProgramPosData* pos){
+    varTableDescendLvl  (objs->vars   , pos->lvl);
     pos->rbp_offset = varTableGetLast(objs->vars)->value.addr;
-    ustackPop(objs->vars, nullptr);
-    varTableDescendLvl  (objs->funcs  , lvl);
+    if (ustackPop(objs->vars, nullptr) != VAR_NOERROR)
+        return false;
+    funcTableDescendLvl  (objs->funcs  , pos->lvl);
+    return true;
 }
 
 
@@ -50,11 +73,11 @@ void funcEntryToTxt(FILE* file, FuncEntry* func) {
 }
 
 char* addNameLbl(ProgramPosData* pos, const char* name, const char* prefix, bool global){
-    char* lbl = (char*)calloc(strlen(name) + strlen(prefix) + strlen("_AABBCCDDEEFFGGHH"), sizeof(char));
+    char* lbl = (char*)calloc(strlen(name) + strlen(prefix)+1 + strlen("_AABBCCDDEEFFGGHH")+1, sizeof(char));
     if (!lbl)
         return nullptr;
     programAddNewMem(pos, lbl);
-    sprintf(lbl, "%s%s_%p", prefix, name, pos->lbl_id);
+    sprintf(lbl, "%s%s_%lX", prefix, name, pos->lbl_id);
     pos->lbl_id++;
     return lbl;
 }
@@ -88,6 +111,14 @@ bool programCreateFunc(ProgramNameTable* objs, ProgramPosData* pos, char* name, 
     return ret;
 }
 
-
+FuncEntry* programGetFunc(ProgramNameTable* objs, ProgramPosData* pos, FuncCallInfo call){
+    for (FuncEntry* i = ((FuncEntry*)objs->funcs->data) + objs->funcs->size; i >= objs->funcs->data; i--){
+        if (strcmp(i->name, call.name) == 0 && i->value.attr.varfunc == call.varfunc 
+            && valCntMatchesInt(i->value.attr.arg_cnt, call.argc) && valCntMatchesInt(i->value.attr.ret_cnt, call.retc)){
+            return i;
+        }
+    }
+    return nullptr;
+}
 
 

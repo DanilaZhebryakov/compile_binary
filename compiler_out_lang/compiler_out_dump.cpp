@@ -55,7 +55,7 @@ void printTableInstr(FILE* file, void* instr_ptr){
     compilerTableInstr_t* instr = (compilerTableInstr_t*)instr_ptr;
     instr_ptr = ((char*)instr_ptr) + sizeof(*instr);
     fprintf(file, " %s ", (char*)instr_ptr);
-    instr_ptr = ((char*) instr_ptr) + strlen((char*)instr_ptr);
+    instr_ptr = ((char*) instr_ptr) + strlen((char*)instr_ptr)+1;
     switch (*instr){
         case COUT_TABLE_SIMPLE:
             fprintf(file, "=%ld", *((COMPILER_NATIVE_TYPE*)instr_ptr));
@@ -64,7 +64,7 @@ void printTableInstr(FILE* file, void* instr_ptr){
             fprintf(file, "=%ld@<stk>", *((COMPILER_NATIVE_TYPE*)instr_ptr));
             break;
         case COUT_TABLE_SECT:
-            fprintf(file, "=%ld@%s", *(COMPILER_NATIVE_TYPE*)( ((char*)instr_ptr) + strlen((char*)instr_ptr)), (char*)instr_ptr);
+            fprintf(file, "=%ld@%s", *(COMPILER_NATIVE_TYPE*)( ((char*)instr_ptr) + strlen((char*)instr_ptr)+1), (char*)instr_ptr);
             break;
         case COUT_TABLE_HERE:
             fprintf(file, "=<here>");
@@ -73,12 +73,13 @@ void printTableInstr(FILE* file, void* instr_ptr){
             fprintf(file, "<pre>");
             break;
         case COUT_TABLE_ADDSECT:
-            fprintf(file, "<new section>[");
+            fputs("<new section>[", file);
             fputc(((BinSectionAttr*)instr_ptr)->readable   ? 'R' : '.', file);
             fputc(((BinSectionAttr*)instr_ptr)->writable   ? 'W' : '.', file);
             fputc(((BinSectionAttr*)instr_ptr)->executable ? 'X' : '.', file);
             fputc(((BinSectionAttr*)instr_ptr)->entry_point ?'E' : '.', file);
-            fprintf(file, "f%2.2b]", ((BinSectionAttr*)instr_ptr)->fill_type);
+            fprintf(file, "f%d", ((BinSectionAttr*)instr_ptr)->fill_type);
+            fputc(']', file);
             break;
         default:
             fprintf(file, "UNDEFINED");
@@ -100,6 +101,7 @@ void printSpecialInstr(FILE* file, void* instr_ptr){
     switch (instr){
         case COUT_SPEC_RETCB:
             fputs("RetCB", file);
+            break;
         case COUT_SPEC_RETF:
             fputs("RetFunc", file); 
             break;
@@ -114,7 +116,7 @@ void printCompilerInstruction(FILE* file, void* instr_ptr){
     CompilerInstrHeader* header = (CompilerInstrHeader*)instr_ptr;
     instr_ptr = ((char*)instr_ptr) + sizeof(*header);
 
-    fprintf(file, "[%3d] %s (%d)", header->size, getInstrTypeName(header->type), header->argc);
+    fprintf(file, "[%3lu] %s (%d)", header->size, getInstrTypeName(header->type), header->argc);
 
     switch (header->type){
         case COUT_TYPE_GENERIC:
@@ -128,7 +130,9 @@ void printCompilerInstruction(FILE* file, void* instr_ptr){
             break;
         case COUT_TYPE_JMP:
             fprintf(file, "%s ", jmp_type_info[*((compilerJumpType_t*)instr_ptr)].name);
+            /* FALLTHRU */
         case COUT_TYPE_LOAD:
+            /* FALLTHRU */
         case COUT_TYPE_STORE:
             printInstrMemArg(file, instr_ptr);
             break;
@@ -156,6 +160,6 @@ void printCompilerOutput(FILE* file, CompilationOutput* out){
         next_instr_ptr = ((char*)next_instr_ptr) + ((CompilerInstrHeader*)next_instr_ptr)->size;
     }
     if (next_instr_ptr != data_end){
-        fprintf(file, "Data ended incorrectly: %d bytes past the end\n", ((char*)next_instr_ptr) - ((char*)data_end));
+        fprintf(file, "Data ended incorrectly: %ld bytes past the end\n", ((char*)next_instr_ptr) - ((char*)data_end));
     }
 }

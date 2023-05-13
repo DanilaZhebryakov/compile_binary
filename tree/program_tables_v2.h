@@ -13,12 +13,12 @@ enum tableType_t {
 
 enum valueAccessType_t{
     VAL_ACC_VOLATILE = 0, // each read/write/call matters. Default for functions
-    VAL_ACC_SOLID    = 1, // two sequential reads/calls are the same. Default for Vfunc
+    VAL_ACC_NORMAL   = 1, // two sequential reads/calls are the same. Default for Vfunc
     VAL_ACC_LAZY     = 2, // give same args -> get same result. Only write changes read. Only last write matters. Default for variables.
     VAL_ACC_CONST    = 3  // always the same. Writes do error. Default for nothing.
 };
 
-enum FuncValCnt_t{
+enum funcValCnt_t{
     VF_VAL_NONE   = 0,
     VF_VAL_SINGLE = 1,
     VF_VAL_MULTI  = 2,
@@ -26,8 +26,8 @@ enum FuncValCnt_t{
 };
 
 struct FuncAttr{
-    FuncValCnt_t arg_cnt:2;
-    FuncValCnt_t ret_cnt:2;
+    funcValCnt_t arg_cnt:2;
+    funcValCnt_t ret_cnt:2;
     valueAccessType_t acc_type:2;
     bool varfunc:1;
 };
@@ -47,13 +47,13 @@ struct FuncCallInfo{
 };
 
 struct FuncData{
-    char* lbl;
-    char* bplbl;
+    const char* lbl;
+    const char* bplbl;
     FuncAttr attr;
 };
 
 struct VarData{
-    char* lbl;
+    const char* lbl;
     int bsize;
     size_t addr;
     size_t elcnt;
@@ -67,5 +67,21 @@ struct ProgramNameTable{
     VarTable* vars;
     FuncTable* funcs;
 };
+
+void programNameTableCtor(ProgramNameTable* table);
+void programNameTableDtor(ProgramNameTable* table);
+
+bool programAscendLvl(ProgramNameTable* objs, ProgramPosData* pos);
+bool programDescendLvl(ProgramNameTable* objs, ProgramPosData* pos);
+
+void varEntryToTxt(FILE* file, VarEntry* var);
+void funcEntryToTxt(FILE* file, FuncEntry* func);
+
+char* addNameLbl(ProgramPosData* pos, const char* name, const char* prefix, bool global);
+
+bool programCreateVar(ProgramNameTable* objs, ProgramPosData* pos, char* name, VarData* var, bool global);
+bool programCreateFunc(ProgramNameTable* objs, ProgramPosData* pos, char* name, FuncData* func, bool global);
+
+FuncEntry* programGetFunc(ProgramNameTable* objs, ProgramPosData* pos, FuncCallInfo call);
 
 #endif

@@ -3,6 +3,8 @@
 
 #include "compile_backend.h"
 #include "compiler_out_lang/compiler_out_dump.h"
+#include "compiler_out_lang/jit_run.h"
+#include "toasm_x86_64/genExecCode.h"
 
 #include "expr/formule_utils.h"
 #include "lib/parseArg.h"
@@ -36,12 +38,30 @@ int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
 
     CompilationOutput cmp_out;
     compilationOutputCtor(&cmp_out);
-    if (!compileProgram(&cmp_out, prog)){
-        IF_NQ(fprintf(stderr,"Compilation errors occured\n");)
+    int cmp_ret = compileProgram(&cmp_out, prog);
+    if (cmp_ret != 0){
+        IF_NQ(fprintf(stderr,"Compilation errors occured. Code:%d\n", cmp_ret);)
     }
     if (flags.out_dump){
+        printf("Dump:\n");
         printCompilerOutput(stdout, &cmp_out);
     }
+
+    ExecOutput exec = {};
+    execOutCtor(&exec);
+    if (translateCompilerOutput_x86_64(&exec, &cmp_out)) {
+        if (execOutPrepareCode(&exec, x86_jit_prefix, sizeof(x86_jit_prefix), x86_jit_suffix, sizeof(x86_jit_suffix))) {
+            execOutputJitRun(&exec);
+        }
+        else{
+            printf("code prepare failed\n");
+        }
+    }
+    else {
+        printf("translation failed\n");
+    }
+
+    execOutDtor(&exec);
     compilationOutputDtor(&cmp_out);
 
     binTreeDtor(prog);

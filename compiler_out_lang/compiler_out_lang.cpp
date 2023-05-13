@@ -3,15 +3,13 @@
 
 #include "compiler_out_lang.h"
 
+#define G_INSTR_DEF(id, enum, name, arg, ret)\
+{name, id, arg, ret},
+
 const GenericInstructionInfo g_instr_info[] = {
-{"bad", COUT_GINSTR_BAD, 0, 0},
-{"nop", COUT_GINSTR_NOP, 0, 0},
-{"add", COUT_GINSTR_ADD, 2, 1},
-{"sub", COUT_GINSTR_SUB, 2, 1},
-{"mul", COUT_GINSTR_MUL, 2, 1},
-{"div", COUT_GINSTR_DIV, 2, 1},
-{"end", COUT_GINSTR_END, 1, 0}
+    #include "generic_instruction_defines.h"
 };
+#undef G_INSTR_DEF
 
 const CompilerJumpTypeInfo jmp_type_info[] = {
 {"NVR", COUT_JUMP_NVR   },
@@ -65,9 +63,12 @@ bool compilationOutputCtor(CompilationOutput* out){
 }
 
 void compilationOutputDtor(CompilationOutput* out){
-    out->capacity = -1;
-    out->size = 0;
     free(out->data);
+    #ifndef NDEBUG
+        out->capacity = -1;
+        out->size = 0;
+        out->data = nullptr;
+    #endif
 }
 
 bool resizeCompilationOutput(CompilationOutput* out, size_t new_size){
@@ -76,16 +77,18 @@ bool resizeCompilationOutput(CompilationOutput* out, size_t new_size){
         return false;
     }
     out->capacity = new_size;
+    out->data = new_data;
     return true;
 }
 
-bool expandCompilationOutput(CompilationOutput* out, void* elem, size_t elem_size) {
+bool expandCompilationOutput(CompilationOutput* out, const void* elem, size_t elem_size) {
     if (out->capacity < out->size + elem_size){
         if (!resizeCompilationOutput(out, (out->capacity + elem_size) * 2)) {
            return false; 
         }
     }
     memcpy(((char*)out->data) + out->size, elem, elem_size);
+    out->size += elem_size;
     return true;
 }
 

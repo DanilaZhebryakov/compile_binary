@@ -6,21 +6,21 @@
 
 #define COMPILER_NATIVE_TYPE size_t
 
-enum compilerInstrType_t{
-    COUT_TYPE_INVALID = 0,
-    COUT_TYPE_GENERIC = 1,
+enum compilerInstrType_t{  //___compiles__|_args_|_ret_|_addinfo___
+    COUT_TYPE_INVALID = 0, //             |      |     |
+    COUT_TYPE_GENERIC = 1, //   something | any  | any | type
 
-    COUT_TYPE_CONST   = 2,
-    COUT_TYPE_LCONST  = 3,
+    COUT_TYPE_CONST   = 2, //   values    | 0    |  1  | val
+    COUT_TYPE_LCONST  = 3, //   values    | ^    |  ^  | name
 
-    COUT_TYPE_LOAD    = 4,
-    COUT_TYPE_STORE   = 5,
+    COUT_TYPE_LOAD    = 4, //     mov ()  | 0/1  |  1  | MemArgAttr (+...
+    COUT_TYPE_STORE   = 5, //     mov ()  | 1/2  |  0  | MemArgAttr (+...
 
-    COUT_TYPE_JMP     = 6,
+    COUT_TYPE_JMP     = 6, //     jmp     | 0/1+F|  0  | type + MemArgAttr (+...
 
-    COUT_TYPE_TABLE   = 7,
-    COUT_TYPE_STRUCT  = 8,
-    COUT_TYPE_SPECIAL = 9
+    COUT_TYPE_TABLE   = 7, //  only lbls  |  0   |  0  | type + name + ...       
+    COUT_TYPE_STRUCT  = 8, // compile info|  0   |  ?  | type
+    COUT_TYPE_SPECIAL = 9  // unusual things like Ret/Call
 };
 
 struct GenericInstructionInfo {
@@ -30,26 +30,24 @@ struct GenericInstructionInfo {
     int retc;
 };
 
+#define G_INSTR_DEF(id, enum, name, arg, ret) \
+COUT_GINSTR_ ## enum = id,
+
 enum compilerGenericInstr_t {
-    COUT_GINSTR_BAD = 0,
-    COUT_GINSTR_NOP = 1,
-    COUT_GINSTR_ADD = 2,
-    COUT_GINSTR_SUB = 3,
-    COUT_GINSTR_MUL = 4,
-    COUT_GINSTR_DIV = 5,
-    COUT_GINSTR_END = 6,
+    #include "generic_instruction_defines.h"
 };
+#undef G_INSTR_DEF
 
 extern const GenericInstructionInfo g_instr_info[];
 
-enum compilerTableInstr_t {
-    COUT_TABLE_NULL   = 0,
-    COUT_TABLE_SIMPLE = 1,
-    COUT_TABLE_PRE    = 2,
-    COUT_TABLE_HERE   = 3,
-    COUT_TABLE_STACK  = 4,
-    COUT_TABLE_SECT   = 5,
-    COUT_TABLE_ADDSECT = 6
+enum compilerTableInstr_t {//_what___________|_add data_______
+    COUT_TABLE_NULL   = 0, // unused         | 
+    COUT_TABLE_SIMPLE = 1, // constant       | value(native type)
+    COUT_TABLE_PRE    = 2, // prototype      | actual def offset(size_t)
+    COUT_TABLE_HERE   = 3, // label          | none
+    COUT_TABLE_STACK  = 4, // alloc on stack | size(native type)
+    COUT_TABLE_SECT   = 5, // alloc in sect  | name + size(native type)
+    COUT_TABLE_ADDSECT = 6 // add section    | BinSectionAttr
 };
 
 enum compilerStructureInstr_t {
@@ -119,6 +117,11 @@ struct BinSectionAttr {
     bool executable:1;
 };
 
+const BinSectionAttr BIN_SECTION_PRESET_MAIN  = {BIN_SECTION_INITIALISED, 1, 0, 0, 1};
+const BinSectionAttr BIN_SECTION_PRESET_FUNC  = {BIN_SECTION_INITIALISED, 0, 0, 0, 1};
+const BinSectionAttr BIN_SECTION_PRESET_DATA  = {BIN_SECTION_INITIALISED, 0, 1, 1, 0};
+const BinSectionAttr BIN_SECTION_PRESET_CONST = {BIN_SECTION_INITIALISED, 0, 1, 0, 0};
+
 struct CompilerInstrHeader {
     size_t size;
     int argc;
@@ -137,7 +140,7 @@ void compilationOutputDtor(CompilationOutput* out);
 
 bool resizeCompilationOutput(CompilationOutput* out, size_t size);
 
-bool expandCompilationOutput(CompilationOutput* out, void* elem, size_t elem_size);
+bool expandCompilationOutput(CompilationOutput* out, const void* elem, size_t elem_size);
 
 #define EXPAND_COMPILATION_OUTPUT(out, elem) \
 expandCompilationOutput(out, (elem), sizeof(*(elem)))
