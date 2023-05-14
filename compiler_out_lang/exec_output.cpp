@@ -33,7 +33,7 @@ void execOutDtor(ExecOutput* out){
 }
 
 ExecOutSection* execOutFindSect(ExecOutput* out, const char* name) {
-    for (ExecOutSection* sect = out->sects + out->sect_count; sect > out->sects; sect--){
+    for (ExecOutSection* sect = out->sects + out->sect_count-1; sect >= out->sects; sect--){
         if (strcmp(sect->name, name) == 0) {
             return sect;
         }
@@ -72,14 +72,12 @@ bool execoutAddSection(ExecOutput* out, const char* name, BinSectionAttr attr, s
         out->sects = (ExecOutSection*)calloc(1, sizeof(ExecOutSection));
         if (!out->sects)
             return false;
-        out->sect_count = 1;
     }
     else {
         void* new_sects = realloc(out->sects, (out->sect_count + 1)*sizeof(*(out->sects)));
         if (!new_sects)
             return false;
         out->sects = (ExecOutSection*)new_sects;
-        out->sect_count++;
     }
     if (attr.fill_type == BIN_SECTION_INITIALISED) {
         out->sects[out->sect_count].data = calloc(init_sect_size, sizeof(char));
@@ -94,6 +92,7 @@ bool execoutAddSection(ExecOutput* out, const char* name, BinSectionAttr attr, s
     out->sects[out->sect_count].size = 0;
     out->sects[out->sect_count].attr = attr;
     out->sects[out->sect_count].name = name;
+    out->sect_count++;
     return true;
 }
 
@@ -128,7 +127,7 @@ bool execOutHandleTableInstr(ExecOutput* out, const void* instr_ptr) {
         case COUT_TABLE_HERE:
             return cmpoutSymTablePut(&(out->syms), {{(out->sects + out->curr_sect)->size, out->curr_sect, {1,0}}, name_ptr, out->lvl, 0});
         case COUT_TABLE_PRE:
-            return execOutHandleTableInstr(out, ((const char*)instr_ptr) + *((size_t*)instr_ptr));
+            return execOutHandleTableInstr(out, ((const char*)instr_ptr) + *((size_t*)instr_ptr)); //gvn
         default:
             Error_log("Unknown table instr %d\n", instr);
             return false;
@@ -226,7 +225,7 @@ bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, co
     memcpy(new_sect.data, prefix, prefsize);
     new_sect.size = prefsize;
 
-    for (ExecOutSection* sect = out->sects; sect < out->sects + out->sect_count-1; sect++){
+    for (ExecOutSection* sect = out->sects; sect < out->sects + out->sect_count; sect++){
         if (sect->attr.entry_point) {
             memcpy(((char*)new_sect.data) + new_sect.size, sect->data, sect->size);
             new_sect.size += sect->size;
@@ -238,6 +237,7 @@ bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, co
     }
     size_t repl_sect_id = replaced_sect - out->sects;
     memcpy(((char*)new_sect.data) + new_sect.size, suffix, sufsize);
+    new_sect.size += sufsize;
 
     for (RelocationEntry* rel = out->relt.data + out->relt.size; rel >= out->relt.data; rel--){
         if (out->sects[rel->sect_id].attr.entry_point){
@@ -246,7 +246,7 @@ bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, co
             out->sects[rel->sect_id].attr.entry_point = 0;
         }
         if (out->sects[rel->rel_to_sect].attr.entry_point){
-            assert(rel->size > 8);
+            assert(rel->size <= 8);
             size_t* rel_ptr = (size_t*)(((char*)out->sects[rel->sect_id].data) + rel->sect_offset);
             *rel_ptr = ((*rel_ptr + sect_reloc_offs[rel->rel_to_sect]) & (-1L >> (8*(8-rel->size))))
                     | ((*rel_ptr) & (-1L >> rel->size));

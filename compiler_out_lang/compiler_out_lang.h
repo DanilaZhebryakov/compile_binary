@@ -51,20 +51,50 @@ enum compilerTableInstr_t {//_what___________|_add data_______
 };
 
 enum compilerStructureInstr_t {
-    COUT_STRUCT_NULL = 0,
-    COUT_STRUCT_SECT_B = 1,
-    COUT_STRUCT_SECT_E = 2,
+    COUT_STRUCT_NULL = 0,     // basically 'high-level nop'. Ignored.
+    COUT_STRUCT_SECT_B = 1,   // start of section (switch 'current' sect, where instructins go) [+sect name]
+    COUT_STRUCT_SECT_E = 2,   // end of section (nesting is allowed, so go to previous/nothing)
 
-    COUT_STRUCT_ADDSF = 3,
-    COUT_STRUCT_RMSF = 4,
+    COUT_STRUCT_ADDSF = 3,    // add stack frame (ENTER)
+    COUT_STRUCT_RMSF = 4,     // remove stack frame
 
-    COUT_STRUCT_NCB_B = 5,
-    COUT_STRUCT_RCB_B = 6,
-    COUT_STRUCT_CB_E  = 7,
+    COUT_STRUCT_NCB_B = 5,    // start of non-returnable code block (NCB)
+    COUT_STRUCT_RCB_B = 6,    // strart of returnable code block (RCB)
+    COUT_STRUCT_CB_E =  7,    // end of code block (contains retc)
     
-    COUT_STRUCT_BC_B  = 8,
-    COUT_STRUCT_BC_E  = 9
+    COUT_STRUCT_NONLIN_B  = 8, // start and end of 'non-linear execution area'
+    COUT_STRUCT_NONLIN_E  = 9
 };
+
+/*
+    Code is divied in following ways:
+        1) Sections. (SECT)
+            Code is placed into specific section in executable output.
+            This code is fully independent of any code in any other sections (but can jump to / call them)
+            Code written into the same section between different section/endsection instances is also considered independent.
+            Only code in section marked as entrypoint will be executed automatically. (in oreder of these section being defined)
+            Such code should not corrupt stack
+            Code in any other sections is executed only when called.
+            Nesting the section inside itself will either search for next section with the same name&attr or even create it if required.
+            Sections may be merged together after compilation in any of two cases:
+                1) both name and attrs are the same (like when self-nesting occurs)
+                2) sections marked as entrypoint may be merged even if attrs do not match (in this case perms are ORed together).
+                    Entrypoint sections are always given EXECUTE permission.
+            Avoid entrypoint section self-nesting, as it may result in unpredictable behavior.
+        2) Code blocks. (CB)
+            There are two types of code blocks: returnable (RCB) and non-returnable (NCB)
+            The difference between these is that RCB re-define "!EOCB!" label to their end, which can be jumped to using RETCB.
+            Code blocks can be executed only from the start. Jumps in the middle are not allowed
+            Some data can be left on stack (logically) after code block returns. Count of these values is specified with ending instruction
+            These values are actually placed according to calling convention, but with rax as the first register.
+            Note that stack variables are allocated immediately, but removed at the end of code block.
+            This does mean that vars should be inside code block to work, but also means that they block pop-ing past their location
+        3) Non-linear area. (NONLIN)
+            Any data in this thing is treated as if it was on the very top level.
+            This means that jumps there are allowed unless inside nested code block.
+            This is used to brace IFs and loops, as jumps inside code blocks are normally restricted.
+            This also means that stack var definitions are not allowed (references are fine tho)
+*/
 
 enum compilerSpecialInstr_t {
     COUT_SPEC_RETCB = 1,
@@ -125,6 +155,7 @@ const BinSectionAttr BIN_SECTION_PRESET_CONST = {BIN_SECTION_INITIALISED, 0, 1, 
 struct CompilerInstrHeader {
     size_t size;
     int argc;
+    int retc;
     bool join;
     compilerInstrType_t type;
 };
