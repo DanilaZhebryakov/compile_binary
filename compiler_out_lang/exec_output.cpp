@@ -367,11 +367,8 @@ bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, co
             rel->sect_offset += sect_reloc_offs[rel->sect_id];
             out->sects[rel->sect_id].attr.entry_point = 0;
         }
-        if (out->sects[rel->rel_to_sect].attr.entry_point){
-            assert(rel->size <= 8);
-            size_t* rel_ptr = (size_t*)(((char*)out->sects[rel->sect_id].data) + rel->sect_offset);
-            *rel_ptr = ((*rel_ptr + sect_reloc_offs[rel->rel_to_sect]) & (-1L >> (8*(8-rel->size))))
-                    | ((*rel_ptr) & (-1L >> rel->size));
+        if (out->sects[rel->relative_to].attr.entry_point){
+            relocationEntryApply(rel, out->sects[rel->sect_id].data, sect_reloc_offs[rel->relative_to]);
         }
     }
     memcpy(replaced_sect, &new_sect, sizeof(new_sect));

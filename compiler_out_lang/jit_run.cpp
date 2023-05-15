@@ -14,8 +14,10 @@ static size_t round_to_pages(size_t i){
     return i + (PAGESIZE-1 - ((i-1) % PAGESIZE));
 }
 
-void execOutputJitRun(ExecOutput* out) {
+bool execOutputJitRun(ExecOutput* out) {
+    bool ret = true;
     // first, allocate new buffers and copy stuff there
+
     void** buffer_ptrs = (void**)calloc(out->sect_count, sizeof(void*));
     for (size_t i = 0; i < out->sect_count; i++){
         buffer_ptrs[i] = aligned_alloc(PAGESIZE, round_to_pages(out->sects[i].size));
@@ -33,17 +35,28 @@ void execOutputJitRun(ExecOutput* out) {
                 break;
             default:
                 error_log("Unknown filltype %d", out->sects[i].attr.fill_type);
-                return;
+                ret = false;
+                break;
         }
+    }
+
+    if (!ret){
+        for (size_t i = 0; i < out->sect_count; i++){
+            free(buffer_ptrs[i]);
+        }
+        free(buffer_ptrs);
+        return false;
     }
 
     //then, relocate everything to actual adresses of these buffers
     for (RelocationEntry* rel = out->relt.data + out->relt.size-1; rel >= out->relt.data; rel--){
         assert(rel->size <= 8);
-        size_t offset = (size_t)(buffer_ptrs[rel->rel_to_sect]);
-        size_t* rel_ptr = (size_t*)(((char*)buffer_ptrs[rel->sect_id]) + rel->sect_offset);
-        *rel_ptr = ((*rel_ptr + offset) & (-1L >> (8*(8-rel->size))))
-                    | ((*rel_ptr) & (-1L >> rel->size));
+        size_t offset = (size_t)(buffer_ptrs[rel->relative_to]);
+
+        if (relocationEntryApply(rel, buffer_ptrs[rel->sect_id], offset)){
+            ret = false;
+            break;
+        }
     }
 
     //then, edit section protection and get 'main' section
@@ -56,7 +69,8 @@ void execOutputJitRun(ExecOutput* out) {
             | (sect->attr.executable ? PROT_EXEC : 0)
             )) {
                 perror_log("Memory protect failed\n");
-                return;
+                ret = false;
+                break;
             }
             if (sect->attr.entry_point) {
                 if (!entry_point){
@@ -64,18 +78,33 @@ void execOutputJitRun(ExecOutput* out) {
                 }
                 else {
                     error_log("More than one entrypoint section defined. execOutPrepareCode() can probably fix this.\n");
-                    return;
+                    ret = false;
+                    break;
                 }
             }
         }
     }
+
     if (!entry_point) {
         error_log("Run failed: no entrypoint section\n");
-        return;
+        ret = false;
     }
-    fprintf(stderr, "Running at: %p", entry_point);
-    ((void (*)())entry_point)(); //RUN
-    
-    info_log("How did we get there?");
-    return;
+    if (ret){
+        fprintf(stderr, "Running at: %p", entry_point);
+        ((void (*)())entry_point)(); //RUN
+    }
+
+    for (ExecOutSection* sect = out->sects; sect < out->sects + out->sect_count; sect++){
+        if (sect->size > 0) {
+            if (0 != mprotect(buffer_ptrs[sect - out->sects], sect->size, PROT_READ | PROT_WRITE)) {
+                perror_log("Memory un-protect failed\n");
+                ret = false;
+            }
+            else{
+                free(buffer_ptrs[sect - out->sects]);
+            }
+        }
+    }
+    free(buffer_ptrs);
+    return ret;
 }

@@ -4,8 +4,8 @@
 #include "compiler_out_lang/compiler_out_lang.h"
 #include "compiler_out_lang/exec_output.h"
 
-const unsigned char x86_jit_prefix[] = {0xCC};
-const unsigned char x86_jit_suffix[] = {0xF1};
+const unsigned char x86_jit_prefix[] = {0xCC}; //trap
+const unsigned char x86_jit_suffix[] = {0xC3}; //ret
 
 bool translateInstruction_x86_64(ExecOutput* out, void* instr_ptr);
 

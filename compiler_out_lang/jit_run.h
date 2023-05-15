@@ -3,6 +3,6 @@
 
 #include "exec_output.h"
 
-void execOutputJitRun(ExecOutput* out);
+bool execOutputJitRun(ExecOutput* out);
 
 #endif

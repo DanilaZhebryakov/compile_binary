@@ -8,7 +8,7 @@ const int min_reltable_cap = 100;
 struct  RelocationEntry {
     size_t sect_id;
     size_t sect_offset;
-    size_t rel_to_sect;
+    size_t relative_to;
     int size;
 };
 
@@ -23,5 +23,7 @@ bool relocationTableCtor(RelocationTable* table);
 void relocationTableDtor(RelocationTable* table);
 
 bool relocationTableAdd(RelocationTable* table, RelocationEntry* value);
+
+bool relocationEntryApply(RelocationEntry* entry, void* sect_start, long long reloc_offset);
 
 #endif
