@@ -7,6 +7,7 @@
 struct CmpoutSymAttr {
     bool relocatable:1;
     bool global:1;
+    bool prototype:1;
 };
 
 struct CmpoutSymData {

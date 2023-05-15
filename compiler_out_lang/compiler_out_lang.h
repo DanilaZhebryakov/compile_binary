@@ -51,19 +51,20 @@ enum compilerTableInstr_t {//_what___________|_add data_______
 };
 
 enum compilerStructureInstr_t {
+    COUT_STRUCT_END_MASK = 0x80,
     COUT_STRUCT_NULL = 0,     // basically 'high-level nop'. Ignored.
     COUT_STRUCT_SECT_B = 1,   // start of section (switch 'current' sect, where instructins go) [+sect name]
-    COUT_STRUCT_SECT_E = 2,   // end of section (nesting is allowed, so go to previous/nothing)
+    COUT_STRUCT_SECT_E = 1 | COUT_STRUCT_END_MASK,
 
     COUT_STRUCT_ADDSF = 3,    // add stack frame (ENTER)
-    COUT_STRUCT_RMSF = 4,     // remove stack frame
+    COUT_STRUCT_RMSF  = 3  | COUT_STRUCT_END_MASK,     // remove stack frame (LEAVE)
 
     COUT_STRUCT_NCB_B = 5,    // start of non-returnable code block (NCB)
     COUT_STRUCT_RCB_B = 6,    // strart of returnable code block (RCB)
-    COUT_STRUCT_CB_E =  7,    // end of code block (contains retc)
+    COUT_STRUCT_CB_E =  5 | COUT_STRUCT_END_MASK,    // end of code block (contains retc)
     
     COUT_STRUCT_NONLIN_B  = 8, // start and end of 'non-linear execution area'
-    COUT_STRUCT_NONLIN_E  = 9
+    COUT_STRUCT_NONLIN_E  = 8 | COUT_STRUCT_END_MASK
 };
 
 /*

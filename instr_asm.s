@@ -45,3 +45,18 @@ section .text
         add rsp, 8
     .dup:
         push qword[rsp]
+    .entr:
+        enter 0, 1
+        leave
+        
+        add rsp, 8
+        add rsp, 0x0BAADF
+        sub rsp, 8
+        sub rsp, 0x0BAADF
+        nop
+    .suff:
+        mov rsp, rbp
+        pop rbp
+        mov rax, 0x3C ;exit
+        xor rdi, rdi
+        syscall

@@ -61,13 +61,13 @@ bool programDescendLvl(ProgramNameTable* objs, ProgramPosData* pos){
 
 
 void varEntryToTxt(FILE* file, VarEntry* var) {
-    fprintf(file, "VAR %s v%d :%s d%df%d %lux%X ", var->name, tbl_entry_format_version, var->value.lbl, var->depth, var->fdepth, var->value.elcnt, var->value.bsize);
+    fprintf(file, "VAR %s v%d :%s d%luf%lu %lux%X ", var->name, tbl_entry_format_version, var->value.lbl, var->depth, var->fdepth, var->value.elcnt, var->value.bsize);
 
     fprintf(file, "a$%X&%X@%X", var->value.attr.acc_type, var->value.attr.addressable, var->value.attr.array);
 }
 
 void funcEntryToTxt(FILE* file, FuncEntry* func) {
-    fprintf(file, "FUNC %s v%d c:%s b:%s d%df%d ", func->name, tbl_entry_format_version, func->value.lbl, func->value.bplbl, func->fdepth, func->fdepth);
+    fprintf(file, "FUNC %s v%d c:%s b:%s d%luf%lu ", func->name, tbl_entry_format_version, func->value.lbl, func->value.bplbl, func->fdepth, func->fdepth);
 
     fprintf(file, "a$%XA%XR%X ", func->value.attr.acc_type, func->value.attr.arg_cnt, func->value.attr.ret_cnt);
 }
@@ -112,7 +112,7 @@ bool programCreateFunc(ProgramNameTable* objs, ProgramPosData* pos, char* name, 
 }
 
 FuncEntry* programGetFunc(ProgramNameTable* objs, ProgramPosData* pos, FuncCallInfo call){
-    for (FuncEntry* i = ((FuncEntry*)objs->funcs->data) + objs->funcs->size; i >= objs->funcs->data; i--){
+    for (FuncEntry* i = ((FuncEntry*)objs->funcs->data) + objs->funcs->size-1; i >= objs->funcs->data; i--){
         if (strcmp(i->name, call.name) == 0 && i->value.attr.varfunc == call.varfunc 
             && valCntMatchesInt(i->value.attr.arg_cnt, call.argc) && valCntMatchesInt(i->value.attr.ret_cnt, call.retc)){
             return i;

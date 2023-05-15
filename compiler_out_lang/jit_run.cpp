@@ -17,7 +17,7 @@ static size_t round_to_pages(size_t i){
 void execOutputJitRun(ExecOutput* out) {
     // first, allocate new buffers and copy stuff there
     void** buffer_ptrs = (void**)calloc(out->sect_count, sizeof(void*));
-    for (int i = 0; i < out->sect_count; i++){
+    for (size_t i = 0; i < out->sect_count; i++){
         buffer_ptrs[i] = aligned_alloc(PAGESIZE, round_to_pages(out->sects[i].size));
         switch (out->sects[i].attr.fill_type) {
             case BIN_SECTION_INITIALISED:

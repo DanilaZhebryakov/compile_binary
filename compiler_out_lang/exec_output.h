@@ -10,14 +10,27 @@
 
 const size_t init_sect_size = 100;
 
+enum execOutContextType_t {
+    EOUT_CONTEXT_ROOT   = 0,
+    EOUT_CONTEXT_SECT   = 1,
+    EOUT_CONTEXT_CB     = 2,
+    EOUT_CONTEXT_NONLIN = 4,
+    EOUT_CONTEXT_SF     = 5,
+
+    EOUT_CONTEXT_INVALID = 0xFF
+};
+
 struct ExecOutContext {
-    size_t curr_sect;
-    size_t stk_size;
+    execOutContextType_t type;
+    size_t sect;
+    size_t stk_size_beg;
+    size_t stk_size_curr;
 };
 
 struct ExecOutSection {
     const char* name;
     BinSectionAttr attr;
+    bool in_use;
     size_t size;
     size_t capacity;
     void* data;
@@ -26,19 +39,24 @@ struct ExecOutSection {
 struct ExecOutput{
     RelocationTable relt;
     CmpoutSymTable  syms;
+    UStack context_stk;
 
     ExecOutSection* sects;
     
+    ExecOutContext* curr_context;
     size_t sect_count;
-    size_t curr_sect;
     size_t lvl;
 };
+
+bool execOutPushContext(ExecOutput* out, ExecOutContext* context);
+
+bool execOutPopContext(ExecOutput* out);
 
 bool execOutCtor(ExecOutput* out);
 
 void execOutDtor(ExecOutput* out);
 
-ExecOutSection* execOutFindSect(ExecOutput* out, const char* name);
+size_t execOutFindSect(ExecOutput* out, const char* name);
 
 bool execOutWriteSection(ExecOutSection* sect, size_t dt_size, const void* dt_val, size_t val_size);
 

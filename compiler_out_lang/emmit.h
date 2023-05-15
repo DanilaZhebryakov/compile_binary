@@ -13,7 +13,7 @@ bool emmitMemInstruction(CompilationOutput* out, CompilerMemArgAttr attr, bool s
 bool emmitConstInstruction_l(CompilationOutput* out, const char* lbl);
 bool emmitConstInstruction(CompilationOutput* out, COMPILER_NATIVE_TYPE val);
 
-bool emmitStructuralInstruction(CompilationOutput* out, compilerStructureInstr_t instr);
+bool emmitStructuralInstruction(CompilationOutput* out, compilerStructureInstr_t instr, int arg = 0, int ret = 0);
 bool emmitSetSection(CompilationOutput* out, const char* name);
 
 bool emmitTableSomething(CompilationOutput* out, compilerTableInstr_t instr, const char* name, size_t addsize);

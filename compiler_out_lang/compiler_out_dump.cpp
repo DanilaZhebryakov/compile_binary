@@ -20,9 +20,9 @@ const char* getStructInstrString(compilerStructureInstr_t instr){
     case COUT_STRUCT_CB_E:
         return "End of code block";
 
-    case COUT_STRUCT_BC_B:
+    case COUT_STRUCT_NONLIN_B:
         return "Branching code";
-    case COUT_STRUCT_BC_E:
+    case COUT_STRUCT_NONLIN_E:
         return "End of branching code";
 
     default:
@@ -37,7 +37,7 @@ void printInstrMemArg(FILE* file, void* instr_ptr){
     CompilerMemArgAttr* attr = (CompilerMemArgAttr*) instr_ptr;
     instr_ptr = ((char*) instr_ptr) + sizeof(*attr);
     fputc((attr->store)   ? '>'   : '<'  , file);
-    fputc((attr->volat)   ? '!'   : '.'  , file);
+    fputc((attr->volat)   ? '!'   : '-'  , file);
     fputs((attr->mem_acc) ? "M@(" : "--(", file);
     if (attr->lbl) {
         fputs((char*)instr_ptr, file);
@@ -58,13 +58,13 @@ void printTableInstr(FILE* file, void* instr_ptr){
     instr_ptr = ((char*) instr_ptr) + strlen((char*)instr_ptr)+1;
     switch (*instr){
         case COUT_TABLE_SIMPLE:
-            fprintf(file, "=%ld", *((COMPILER_NATIVE_TYPE*)instr_ptr));
+            fprintf(file, "=%lu", *((COMPILER_NATIVE_TYPE*)instr_ptr));
             break;
         case COUT_TABLE_STACK:
-            fprintf(file, "=%ld@<stk>", *((COMPILER_NATIVE_TYPE*)instr_ptr));
+            fprintf(file, "=%lu@<stk>", *((size_t*)instr_ptr));
             break;
         case COUT_TABLE_SECT:
-            fprintf(file, "=%ld@%s", *(COMPILER_NATIVE_TYPE*)( ((char*)instr_ptr) + strlen((char*)instr_ptr)+1), (char*)instr_ptr);
+            fprintf(file, "=%lu@%s", *(size_t*)( ((char*)instr_ptr) + strlen((char*)instr_ptr)+1), (char*)instr_ptr);
             break;
         case COUT_TABLE_HERE:
             fprintf(file, "=<here>");
@@ -89,9 +89,9 @@ void printTableInstr(FILE* file, void* instr_ptr){
 void printStructInstr(FILE* file, void* instr_ptr){
     compilerStructureInstr_t instr = *((compilerStructureInstr_t*)instr_ptr);
     instr_ptr = ((char*)instr_ptr) + sizeof(instr);
-    printf("%s", getStructInstrString(instr));
+    fprintf(file, "%s", getStructInstrString(instr));
     if (instr == COUT_STRUCT_SECT_B) {
-        printf(" %s", (char*) instr_ptr);
+        fprintf(file, " %s", (char*) instr_ptr);
     }
 }
 
@@ -116,7 +116,7 @@ void printCompilerInstruction(FILE* file, void* instr_ptr){
     CompilerInstrHeader* header = (CompilerInstrHeader*)instr_ptr;
     instr_ptr = ((char*)instr_ptr) + sizeof(*header);
 
-    fprintf(file, "[%3lu] %s (%d)", header->size, getInstrTypeName(header->type), header->argc);
+    fprintf(file, "[%3lu] %s (%d>%d)", header->size, getInstrTypeName(header->type), header->argc, header->retc);
 
     switch (header->type){
         case COUT_TYPE_GENERIC:

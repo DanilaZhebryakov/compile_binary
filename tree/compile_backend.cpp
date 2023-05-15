@@ -19,6 +19,13 @@
         ret = c_ret;     \
 }
 
+#define CHECK_BOOL(...) { \
+    if(!(__VA_ARGS__)) {          \
+        error_log("Fail: %d %s", __LINE__, #__VA_ARGS__);\
+        return -1;        \
+    }                     \
+}
+
 #define COMPILATION_ERROR(...) \
 {error_log(__VA_ARGS__);        \
 printf_log("at:'");           \
@@ -44,7 +51,10 @@ static int compileVarAcc(CompilationOutput* out, VarEntry* var, ProgramNameTable
     }
 
     CompilerMemArgAttr mem_acc_attr = {};
-    mem_acc_attr.mod_bp = true;
+    mem_acc_attr.mod_bp  = true;
+    mem_acc_attr.mem_acc = true;
+    mem_acc_attr.mod_arg = false;
+
     mem_acc_attr.volat  = var->value.attr.acc_type == VAL_ACC_VOLATILE;
     mem_acc_attr.const_ = var->value.attr.acc_type == VAL_ACC_CONST;
 
@@ -68,7 +78,7 @@ static int compileVarDef(F_DEF_ARGS){
     }
 
     VarData var_data = {};
-    var_data.bsize = sizeof(COMPILER_NATIVE_TYPE);
+    var_data.bsize = 1;
     var_data.elcnt = 1;
     var_data.attr = {VAL_ACC_NORMAL, true, false, false};
 
@@ -101,10 +111,10 @@ static int compileCodeBlock(F_DEF_ARGS){
     pos->lvl++;
 
     if (req_val == 0){
-        emmitStructuralInstruction(out, COUT_STRUCT_NCB_B);
+        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NCB_B));
     }
     else{
-        emmitStructuralInstruction(out, COUT_STRUCT_RCB_B);
+        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RCB_B));
     }
 
     CHECK_ERR(compileCode(F_ARGS(expr), req_val))
@@ -112,7 +122,7 @@ static int compileCodeBlock(F_DEF_ARGS){
     assert_ret(programDescendLvl(objs, pos),-1);
     pos->lvl--;
     
-    emmitStructuralInstruction(out, COUT_STRUCT_CB_E);
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_CB_E, 0, req_val));
     return ret;
 }
 
@@ -153,12 +163,10 @@ static int compileKVarNode(F_DEF_ARGS, int write_c) {
     int ret = 0;
     if (expr->data.kword == EXPR_KW_CIO) {
         for (int i = 0; i < write_c; i++){
-            if (!emmitGenericInstruction(out, COUT_GINSTR_OUT))
-                return -1;
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_OUT));;
         }
         for (int i = 0; i < req_val; i++){
-            if (!emmitGenericInstruction(out, COUT_GINSTR_IN))
-                return -1;
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_IN));
         }
         return ret;
     }
@@ -169,8 +177,7 @@ static int compileKVarNode(F_DEF_ARGS, int write_c) {
             COMPILATION_ERROR("Nothing to read\n")
         }
         for (int i = 0; i < write_c; i++){
-            if (!emmitGenericInstruction(out, COUT_GINSTR_IN))
-                return -1;
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_IN));
         }
         return ret;
     }
@@ -179,18 +186,29 @@ static int compileKVarNode(F_DEF_ARGS, int write_c) {
             COMPILATION_ERROR("Bad use of trap\n");
             return 1;
         }
-        if (!emmitGenericInstruction(out, COUT_GINSTR_TRAP))
-            return -1;
+        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_TRAP));
         return ret;
     }
     if (expr->data.kword == EXPR_KW_BAD){
-        if (!emmitGenericInstruction(out, COUT_GINSTR_BAD))
-            return -1;
+        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_BAD));
         return ret;
     }
 
     COMPILATION_ERROR("Bad KW\n")
     return 1;
+}
+
+static int compileConstNode(F_DEF_ARGS) {
+    assert(expr);
+    assert(expr->data.type == EXPR_CONST);
+    if (req_val == 0){
+        return 0;
+    }
+    CHECK_BOOL(emmitConstInstruction(out, expr->data.val));
+    for (int i = 1; i < req_val; i++) {
+        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DUP));
+    }
+    return 0;
 }
 
 static int compileSetDst(F_DEF_ARGS, int write_c){
@@ -286,16 +304,16 @@ static int compileMathOp(F_DEF_ARGS){
 
     switch(expr->data.op){
         case EXPR_MO_ADD:
-            emmitGenericInstruction(out, COUT_GINSTR_ADD);
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_ADD));
             break;
         case EXPR_MO_SUB:
-            emmitGenericInstruction(out, COUT_GINSTR_SUB);
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_SUB));
             break;
         case EXPR_MO_MUL:
-            emmitGenericInstruction(out, COUT_GINSTR_MUL);
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_MUL));
             break;
         case EXPR_MO_DIV:
-            emmitGenericInstruction(out, COUT_GINSTR_DIV);
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DIV));
             break;
         /*
         case EXPR_MO_POW:
@@ -337,6 +355,9 @@ int compileCode(F_DEF_ARGS){
         }
     }
 
+    if (expr->data.type == EXPR_CONST)
+        return compileConstNode(F_ARGS(expr), req_val);
+
     if (expr->data.type == EXPR_VAR)
         return compileVarNode(F_ARGS(expr), req_val, 0);
 
@@ -372,16 +393,21 @@ int compileCode(F_DEF_ARGS){
     return 1;
 }
 
-bool compileProgram(CompilationOutput* out, BinTreeNode* code) {
-    bool ret = 0;
+int compileProgram(CompilationOutput* out, BinTreeNode* code) {
+    int ret = 0, c_ret = 0;
     ProgramNameTable objs = {};
     ProgramPosData pos = {};
     programNameTableCtor(&objs);
     programPosDataCtor(&pos);
-    emmitAddSection(out, "main", BIN_SECTION_PRESET_MAIN); //register main code section
-    emmitSetSection(out, "main");                          // set as current
 
-    compileCodeBlock(out, code, &objs, &pos, code, 0);
+    CHECK_BOOL(emmitAddSection(out, "main", BIN_SECTION_PRESET_MAIN)); // register main code section
+    CHECK_BOOL(emmitSetSection(out, "main"));                          // set as current
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_ADDSF));    // set stack frame
+
+    CHECK_ERR(compileCodeBlock(out, code, &objs, &pos, code, 0));
+
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RMSF  ));    // end stack frame
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_SECT_E));    // end of main
 
     programPosDataDtor(&pos);
     programNameTableDtor(&objs);
