@@ -52,7 +52,7 @@ enum compilerTableInstr_t {//_what___________|_add data_______
 
 enum compilerStructureInstr_t {
     COUT_STRUCT_END_MASK = 0x80,
-    COUT_STRUCT_NULL = 0,     // basically 'high-level nop'. Ignored.
+    COUT_STRUCT_NULL = 0,     // Ignored.
     COUT_STRUCT_SECT_B = 1,   // start of section (switch 'current' sect, where instructins go) [+sect name]
     COUT_STRUCT_SECT_E = 1 | COUT_STRUCT_END_MASK,
 
@@ -118,17 +118,19 @@ struct CompilerJumpTypeInfo {
     int code;
 };
 
+
 enum compilerJumpType_t {
     COUT_JUMP_NVR = 0,
     COUT_JUMP_ALW = 1,
-    COUT_JUMP_CALL = 2,
 
-    COUT_JUMP_EQ  = 3,
-    COUT_JUMP_NE  = 4,
-    COUT_JUMP_GT  = 5,
-    COUT_JUMP_LT  = 6,
-    COUT_JUMP_GE  = 7,
-    COUT_JUMP_LE  = 8    
+    COUT_JUMP_EQ  = 2,
+    COUT_JUMP_NE  = 3,
+
+    COUT_JUMP_GT  = 4,
+    COUT_JUMP_LE  = 5,
+
+    COUT_JUMP_GE  = 6,
+    COUT_JUMP_LT  = 7    
 };
 
 extern const CompilerJumpTypeInfo jmp_type_info[];
@@ -167,6 +169,10 @@ struct CompilationOutput {
     size_t capacity;
 };
 
+const char* getInstrTypeName(compilerInstrType_t type);
+
+compilerJumpType_t invertJumpType(compilerJumpType_t jmp_type);
+
 bool compilationOutputCtor(CompilationOutput* out);
 void compilationOutputDtor(CompilationOutput* out);
 
@@ -178,7 +184,5 @@ bool expandCompilationOutput(CompilationOutput* out, const void* elem, size_t el
 expandCompilationOutput(out, (elem), sizeof(*(elem)))
 
 int getMemArgArgc(CompilerMemArgAttr attr);
-
-const char* getInstrTypeName(compilerInstrType_t type);
 
 #endif

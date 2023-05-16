@@ -4,7 +4,7 @@
 
 #include "bool_check_define.h"
 
-#define DEBUG_MODE
+//#define DEBUG_MODE
 
 #ifdef DEBUG_MODE
 #include "compiler_out_lang/compiler_out_dump.h"
@@ -18,7 +18,7 @@ static const InstructionBinCode ginstrBinCodes[] = {
     {1, "\xF1"}, //invalid
     {1, "\x90"}, //nop
     {6, "\x5a\x58\x48\x01\xd0\x50"}, //pop rdx, pop rax, add, push rax
-    {6, "\x5a\x58\x48\x01\xd0\x50"}, //pop rdx, pop rax, sub, push rax
+    {6, "\x5a\x58\x48\x29\xd0\x50"}, //pop rdx, pop rax, sub, push rax
     {9, "\x59\x58\x48\x31\xd2\x48\xf7\xe1\x50"}, //pop, pop, xor, mul, push
     {9, "\x59\x58\x48\x31\xd2\x48\xf7\xf1\x50"}, //pop, pop, xor, mul, push
     {12,"\x48\x89\xEC\x5d\xb8\x3c\x00\x00\x00\x5f\x0f\x05"}, //exit (pop)
@@ -26,9 +26,33 @@ static const InstructionBinCode ginstrBinCodes[] = {
     {4, "\x48\x83\xC4\x08"}, // add rsp,8
     {22,"\x6A\x00\xb8\0\0\0\0\xBF\0\0\0\0\x48\x89\xE6\xBA\x01\0\0\0\x0F\x05"}, // in
     {24,"\xB8\x01\0\0\0\xBF\x01\0\0\0\x48\x89\xE6\xBA\x01\0\0\0\x0F\x05\x48\x83\xC4\x08"}, //out
-    {1 ,"\xCC"} //int 3 (trap)
+    {1 ,"\xCC"}, //int 3 (trap)
+    {5 ,"\x5a\x58\x48\x39\xd0"}, //cmp
+    {5 ,"\x5a\x58\x48\x85\xd0"} //test
 };
-const int g_instr_cnt = 12;
+const int g_instr_cnt = sizeof(ginstrBinCodes) / sizeof(InstructionBinCode);
+
+static const InstructionBinCode longJmpBinCodes[] = {
+    {1, "\xE9"},
+    {1, "\x3D"}, // actually "cmp eax, imm32" , but this is good 'nop' for this case
+    {2, "\x0F\x84"},
+    {2, "\x0F\x85"},
+    {2, "\x0F\x8F"},
+    {2, "\x0F\x8E"},
+    {2, "\x0F\x8D"},
+    {2, "\x0F\x8C"},
+};
+
+static const InstructionBinCode shortJmpBinCodes[] = {
+    {1, "\xE9"},
+    {1, "\x3C"}, // actually "cmp al, imm8" , but this is good 'nop' for this case
+    {1, "\x74"},
+    {1, "\x75"},
+    {1, "\x7F"},
+    {1, "\x7E"},
+    {1, "\x7D"},
+    {1, "\x7C"},
+};
 
 static bool translateGenericInstr(ExecOutput* out, void* instr_ptr) {
     CompilerInstrHeader* header = ((CompilerInstrHeader*)instr_ptr);
@@ -156,9 +180,37 @@ static bool translateSymConstInstr(ExecOutput* out, void* instr_ptr) {
 static bool translateJumpInstr(ExecOutput* out, void* instr_ptr) {
     CompilerInstrHeader* header = ((CompilerInstrHeader*)instr_ptr);
     assert(header->type == COUT_TYPE_JMP);
-
     instr_ptr = ((char*)instr_ptr) + sizeof(CompilerInstrHeader);
-    assert(0); //NYI
+
+    compilerJumpType_t instr = *(compilerJumpType_t*)instr_ptr;
+    instr_ptr = ((char*)instr_ptr) + sizeof(instr);
+
+    CompilerMemArgAttr* jmp_arg = (CompilerMemArgAttr*) instr_ptr;
+    instr_ptr = ((char*)instr_ptr) + sizeof(*jmp_arg);
+
+    if (jmp_arg->mem_acc || jmp_arg->store) {
+        error_log("Invalid jump target attr\n");
+        return false;
+    }
+
+
+    if (jmp_arg->mod_arg || jmp_arg->mod_bp) {
+        instr = invertJumpType(instr);
+        CHECK_BOOL(execOutPutData(out, shortJmpBinCodes[instr].data, shortJmpBinCodes[instr].size));
+        CHECK_BOOL(execOutPutData(out, "\0", 1)); //helper jump offset. Replace it later
+        ExecOutSection* curr_sect = (out->sects + out->curr_context->sect);
+        size_t jmp_skip_byte_i = curr_sect->size - 1;
+        CHECK_BOOL(translateMemInstr(out, jmp_arg, 0xFF, 4)) //indirect jump
+        ((char*)curr_sect->data)[jmp_skip_byte_i] = curr_sect->size - jmp_skip_byte_i-1;
+        return true;
+    }
+    CHECK_BOOL(execOutPutData(out, longJmpBinCodes[instr].data, longJmpBinCodes[instr].size));
+    long long rel_base = -((out->sects + out->curr_context->sect)->size + 4);
+    if (jmp_arg->lbl) {
+        return execOutPutOffsSym(out, (const char*)instr_ptr, &rel_base, 4, true);
+    }
+    long long offs = rel_base + *(size_t*)instr_ptr;
+    return execOutPutData(out, &offs, 4);
 }
 
 static bool addRspMoveInstr(ExecOutput* out, long int move){

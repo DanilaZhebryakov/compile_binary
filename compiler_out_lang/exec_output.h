@@ -38,6 +38,9 @@ struct ExecOutSection {
 
 struct ExecOutput{
     RelocationTable relt;
+    RelocationTable sym_pre_tbl;
+    UStack          sym_pre_data;
+
     CmpoutSymTable  syms;
     UStack context_stk;
 
@@ -66,10 +69,14 @@ bool execOutHandleTableInstr(ExecOutput* out, const void* instr_ptr);
 
 bool execOutHandleStructInstr(ExecOutput* out, const void* instr_ptr);
 
-bool execOutPutSym(ExecOutput* out, const char* name, int size);
+bool execOutPutSym(ExecOutput* out, const char* name, int size, bool relative = false);
+
+bool execOutPutOffsSym(ExecOutput* out, const char* name, void* offset_ptr, int size, bool relative = false);
 
 bool execOutPutData(ExecOutput* out, const void* data, size_t size);
 
 bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, const void* suffix, size_t sufsize);
+
+bool execOutApplyPreLbls(ExecOutput* out);
 
 #endif

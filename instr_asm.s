@@ -60,3 +60,5 @@ section .text
         mov rax, 0x3C ;exit
         xor rdi, rdi
         syscall
+        cmp rax, rdx
+        test rax, rdx

@@ -45,11 +45,13 @@ int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
     if (flags.out_dump){
         printf("Dump:\n");
         printCompilerOutput(stdout, &cmp_out);
+        printf("\n\n");
     }
 
     ExecOutput exec = {};
     execOutCtor(&exec);
     if (translateCompilerOutput_x86_64(&exec, &cmp_out)) {
+        execOutApplyPreLbls(&exec);
         if (execOutPrepareCode(&exec, x86_jit_prefix, sizeof(x86_jit_prefix), x86_jit_suffix, sizeof(x86_jit_suffix))) {
             execOutputJitRun(&exec);
         }

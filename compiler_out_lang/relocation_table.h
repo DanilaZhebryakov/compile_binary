@@ -10,6 +10,8 @@ struct  RelocationEntry {
     size_t sect_offset;
     size_t relative_to;
     int size;
+    bool sub;
+    bool relative;
 };
 
 struct RelocationTable {

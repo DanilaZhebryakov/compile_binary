@@ -14,13 +14,12 @@ const GenericInstructionInfo g_instr_info[] = {
 const CompilerJumpTypeInfo jmp_type_info[] = {
 {"NVR", COUT_JUMP_NVR   },
 {"ALW", COUT_JUMP_ALW   },
-{"CALL", COUT_JUMP_CALL  },
 {"EQ" , COUT_JUMP_EQ    },
 {"NE" , COUT_JUMP_NE    },
 {"GT" , COUT_JUMP_GT    },
-{"LT" , COUT_JUMP_LT    },
-{"GE" , COUT_JUMP_GE    },
 {"LE" , COUT_JUMP_LE    },
+{"GE" , COUT_JUMP_GE    },
+{"LT" , COUT_JUMP_LT    },
 };
 
 int getMemArgArgc(CompilerMemArgAttr attr){
@@ -50,6 +49,10 @@ const char* getInstrTypeName(compilerInstrType_t type){
         default:
             return "UNDEFINED";
     }
+}
+
+compilerJumpType_t invertJumpType(compilerJumpType_t jmp_type) {
+    return (compilerJumpType_t)(jmp_type ^ 1);
 }
 
 bool compilationOutputCtor(CompilationOutput* out){

@@ -53,7 +53,7 @@ bool execOutputJitRun(ExecOutput* out) {
         assert(rel->size <= 8);
         size_t offset = (size_t)(buffer_ptrs[rel->relative_to]);
 
-        if (relocationEntryApply(rel, buffer_ptrs[rel->sect_id], offset)){
+        if (!relocationEntryApply(rel, buffer_ptrs[rel->sect_id], offset)){
             ret = false;
             break;
         }

@@ -1,8 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "relocation_table.h"
+#include "lib/memmath.h"
 #include "lib/logging.h"
+
+#include "relocation_table.h"
 
 bool relocationTableCtor(RelocationTable* table) {
     table->data = (RelocationEntry*)calloc(min_reltable_cap, sizeof(*(table->data)));
@@ -38,16 +40,24 @@ bool relocationTableAdd(RelocationTable* table, RelocationEntry* value){
 }
 
 bool relocationEntryApply(RelocationEntry* entry, void* sect_start, long long reloc_offset){
-    const int ms = sizeof(long long);
-    if (entry->size > ms) {
-        error_log("Long-sized relocation currently not supported\n");
+    if (entry->sub){
+        reloc_offset = -reloc_offset;
+    }
+    if ((unsigned int)entry->size > sizeof(reloc_offset)) {
+        error_log("Relocation failed: too large relocation size (%d).\n", entry->size);
+    }
+
+    long long t = reloc_offset >> ((sizeof(long long) - entry->size)*8 -1);
+    if ((t!=0) && (t!=-1)) { // check that reloc_offset actually does fit in entry->size bytes 
+        error_log("Relocation failed: overflow detected\n");
         return false;
     }
-    long long rel_value = *(long long*)(((char*)sect_start) + entry->sect_offset);
-    if ((((rel_value + reloc_offset) ^ rel_value) & (((unsigned long long)-1) >> (8*(ms-entry->size))))){ //overflow check
-        error_log("Relocation failed: overflow\n");
+
+    void* rel_ptr = (((char*)sect_start) + entry->sect_offset);
+
+    if (memadd(rel_ptr, &reloc_offset, entry->size)){
+        error_log("Relocation failed: overflow detected\n");
         return false;
     }
-    *(long long*)(((char*)sect_start) + entry->sect_offset) += reloc_offset;
     return true;
 }

@@ -89,7 +89,7 @@ static int compileVarDef(F_DEF_ARGS){
     return ret;
 }
 
-static int compileCodeBlock(F_DEF_ARGS){
+static int compileCodeBlock(F_DEF_ARGS, bool force = false){
     if (expr == nullptr) {
         if (req_val == 0) {
             return 0;
@@ -101,7 +101,7 @@ static int compileCodeBlock(F_DEF_ARGS){
         }
     }
 
-    if (expr->data.type != EXPR_OP || expr->data.op != EXPR_O_ENDL){
+    if (!force && (expr->data.type != EXPR_OP || expr->data.op != EXPR_O_ENDL)){
         return compileCode(F_ARGS(expr), req_val);
     }
 
@@ -344,7 +344,33 @@ static int compileMathOp(F_DEF_ARGS){
     return ret;
 }
 
-int compileCode(F_DEF_ARGS){
+static int compileMiscOp(F_DEF_ARGS){
+    assert(expr);
+    assert(expr->data.type == EXPR_OP);
+    int ret = 0, c_ret = 0;
+
+    if (expr->data.op == EXPR_O_IF) {
+        char* if_end_lbl = (char*)calloc(strlen("IF_AABBCCDDEEFFGGHH_END."), sizeof(char));
+        sprintf(if_end_lbl, "IF_%lX_END", pos->lbl_id);
+
+        CHECK_ERR (compileCodeBlock(F_ARGS(expr->left ), 1));
+        CHECK_BOOL(emmitConstInstruction(out, 0));
+        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_B));
+        CHECK_BOOL(emmitTablePrototype(out, if_end_lbl));
+        CHECK_BOOL(emmitJumpInstruction_l(out, COUT_JUMP_EQ, {}, if_end_lbl));
+        CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 0, true))
+        CHECK_BOOL(emmitTableLbl(out, if_end_lbl));
+        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_E));
+
+        return ret;
+    }
+
+    COMPILATION_ERROR("Unknown misc op for code: %s\n", expr->data.name);
+    return false;
+}
+
+static int compileCode(F_DEF_ARGS){
     int ret = 0, c_ret = 0;
     if (!expr) {
         if(req_val == 0)
@@ -382,10 +408,8 @@ int compileCode(F_DEF_ARGS){
                 return ret;
             case EXPR_O_VDEF:
                 return compileVarDef(F_ARGS(expr->right), 0);
-
             default:
-                COMPILATION_ERROR("Unknown op for code\n")
-                return 1;
+                return compileMiscOp(F_ARGS(expr), req_val);
         }
     }    
 

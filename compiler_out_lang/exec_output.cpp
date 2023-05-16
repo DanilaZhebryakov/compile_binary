@@ -2,58 +2,11 @@
 #include <string.h>
 #include <assert.h>
 
+#include "lib/memmath.h"
 #include "lib/logging.h"
 #include "compiler_out_lang/exec_output.h"
 
 #include "bool_check_define.h"
-
-bool execOutPushContext(ExecOutput* out, ExecOutContext* context) {
-    CHECK_BOOL(ustackPush(&(out->context_stk), context) == VAR_NOERROR);
-    out->curr_context = (ExecOutContext*)ustackTopPtr(&(out->context_stk));
-    return true;
-}
-
-bool execOutPopContext(ExecOutput* out) {
-    CHECK_BOOL(ustackPop(&(out->context_stk), nullptr) == VAR_NOERROR);
-    out->curr_context = (ExecOutContext*)ustackTopPtr(&(out->context_stk));
-    return true;
-}
-
-
-bool execOutCtor(ExecOutput* out){
-    CHECK_BOOL(relocationTableCtor(&(out->relt)));
-    cmpoutSymTableCtor(&(out->syms));
-    ustackCtor(&(out->context_stk), sizeof(*(out->curr_context)));
-
-    ExecOutContext context = {EOUT_CONTEXT_ROOT, (size_t)-1, 0, 0};
-    CHECK_BOOL(execOutPushContext(out, &context));
-
-
-    out->sect_count = 0;
-    out->lvl        = 0;
-    out->sects = nullptr;
-    return true;
-}
-
-void execOutDtor(ExecOutput* out){
-    relocationTableDtor(&(out->relt));
-    cmpoutSymTableDtor(&(out->syms));
-    ustackDtor(&(out->context_stk));
-
-    if (out->sect_count > 0){
-        for (ExecOutSection* sect = out->sects; sect < out->sects + out->sect_count; sect++){
-            if (sect->data != nullptr)
-                free(sect->data);
-        }
-        free(out->sects);
-    }
-    #ifndef NDEBUG
-        out->curr_context = nullptr;
-        out->sect_count = 0;
-        out->sects = nullptr;
-    #endif
-}
-
 
 const char* execOutContextTypeString(execOutContextType_t type) {
     switch (type){
@@ -74,6 +27,54 @@ const char* execOutContextTypeString(execOutContextType_t type) {
 
 inline static ExecOutSection* getCurrSect(ExecOutput* out) {
     return out->sects + out->curr_context->sect;
+}
+
+bool execOutPushContext(ExecOutput* out, ExecOutContext* context) {
+    CHECK_BOOL(ustackPush(&(out->context_stk), context) == VAR_NOERROR);
+    out->curr_context = (ExecOutContext*)ustackTopPtr(&(out->context_stk));
+    return true;
+}
+
+bool execOutPopContext(ExecOutput* out) {
+    CHECK_BOOL(ustackPop(&(out->context_stk), nullptr) == VAR_NOERROR);
+    out->curr_context = (ExecOutContext*)ustackTopPtr(&(out->context_stk));
+    return true;
+}
+
+bool execOutCtor(ExecOutput* out){
+    CHECK_BOOL(relocationTableCtor(&(out->relt)));
+    CHECK_BOOL(relocationTableCtor(&(out->sym_pre_tbl)));
+    cmpoutSymTableCtor(&(out->syms));
+    ustackCtor(&(out->context_stk), sizeof(*(out->curr_context)));
+    ustackCtor(&(out->sym_pre_data), sizeof(CmpoutSymData));
+
+    ExecOutContext context = {EOUT_CONTEXT_ROOT, (size_t)-1, 0, 0};
+    CHECK_BOOL(execOutPushContext(out, &context));
+
+    out->sect_count = 0;
+    out->lvl        = 0;
+    out->sects = nullptr;
+    return true;
+}
+
+void execOutDtor(ExecOutput* out){
+    relocationTableDtor(&(out->relt));
+    relocationTableDtor(&(out->sym_pre_tbl));
+    cmpoutSymTableDtor(&(out->syms));
+    ustackDtor(&(out->context_stk));
+
+    if (out->sect_count > 0){
+        for (ExecOutSection* sect = out->sects; sect < out->sects + out->sect_count; sect++){
+            if (sect->data != nullptr)
+                free(sect->data);
+        }
+        free(out->sects);
+    }
+    #ifndef NDEBUG
+        out->curr_context = nullptr;
+        out->sect_count = 0;
+        out->sects = nullptr;
+    #endif
 }
 
 size_t execOutFindSect(ExecOutput* out, const char* name) {
@@ -120,29 +121,123 @@ bool execOutWriteSection(ExecOutSection* sect, size_t dt_size, const void* dt_va
 }
 
 bool execoutAddSection(ExecOutput* out, const char* name, BinSectionAttr attr, size_t size ) {
+    ExecOutSection* new_sect_ptr = nullptr;
     if (out->sect_count == 0){
         assert(out->sects == nullptr);
         out->sects = (ExecOutSection*)calloc(1, sizeof(ExecOutSection));
         CHECK_BOOL(out->sects);
+        new_sect_ptr = out->sects;
+        out->sect_count = 1;
     }
     else {
-        void* new_sects = realloc(out->sects, (out->sect_count + 1)*sizeof(*(out->sects)));
-        CHECK_BOOL(new_sects)
-        out->sects = (ExecOutSection*)new_sects;
+        for (ExecOutSection* sect = out->sects + out->sect_count-1; sect >= out->sects; sect--){
+            if (sect->name == nullptr && sect->capacity == 0) {
+                new_sect_ptr = sect;
+            }
+        }
+        if (!new_sect_ptr) {
+            void* new_sects = realloc(out->sects, (out->sect_count + 1)*sizeof(*(out->sects)));
+            CHECK_BOOL(new_sects)
+            out->sects = (ExecOutSection*)new_sects;
+            out->sect_count++;
+        }
     }
+
     if (attr.fill_type == BIN_SECTION_INITIALISED) {
-        out->sects[out->sect_count].data = calloc(init_sect_size, sizeof(char));
-        CHECK_BOOL(out->sects[out->sect_count].data);
-        out->sects[out->sect_count].capacity = init_sect_size;
+        new_sect_ptr->data = calloc(init_sect_size, sizeof(char));
+        CHECK_BOOL(new_sect_ptr->data);
+        new_sect_ptr->capacity = init_sect_size;
     }
     else {
         out->sects[out->sect_count].capacity = (size_t)-1;
     }
-    out->sects[out->sect_count].size = 0;
-    out->sects[out->sect_count].attr = attr;
-    out->sects[out->sect_count].name = name;
-    out->sect_count++;
+    new_sect_ptr->size = 0;
+    new_sect_ptr->attr = attr;
+    new_sect_ptr->name = name;
     return true;
+}
+
+bool execOutDefSym(ExecOutput* out, CmpoutSymEntry* entry){
+    if (entry->value.attr.prototype) {
+        CHECK_BOOL(ustackPush(&(out->sym_pre_data), &(entry->value)) == VAR_NOERROR);
+        entry->value.value = out->sym_pre_data.size;
+        return cmpoutSymTablePutPtr(&(out->syms), entry);
+    }
+
+    if (out->syms.size > 0) {
+        for (CmpoutSymEntry* i = cmpoutSymTableGetLast(&(out->syms)); i >= out->syms.data; i--) {
+            if (i->value.attr.prototype && (strcmp(i->name, entry->name) == 0)) {
+                ((CmpoutSymData*)out->sym_pre_data.data)[i->value.value] = entry->value;
+                memcpy(i, entry, sizeof(*entry));
+                return true;
+            }
+        }
+    }
+    return cmpoutSymTablePutPtr(&(out->syms), entry);
+}
+
+bool execOutPutSym(ExecOutput* out, const char* name, int size, bool relative) {
+    if (out->curr_context->sect == (size_t)-1){
+        error_log("Attempt to write data to no section\n");
+        return false;
+    }
+
+    CmpoutSymEntry* sym = cmpoutSymTableGet(&(out->syms), name);
+
+    if (!sym) {
+        error_log("Symbol %s undefined\n", name);
+        return false;
+    }
+
+    if (sym->value.attr.prototype) {
+        RelocationEntry entry = {out->curr_context->sect, getCurrSect(out)->size, sym->value.value, size, false, relative};
+        CHECK_BOOL(relocationTableAdd(&(out->sym_pre_tbl), &entry))
+        return (execOutWriteSection(getCurrSect(out), size, nullptr, 0));
+    }
+    if (sym->value.attr.relocatable && !relative) {
+        RelocationEntry entry = {out->curr_context->sect, getCurrSect(out)->size, sym->value.section_id, size};
+        CHECK_BOOL(relocationTableAdd(&(out->relt), &entry))
+    }
+    return (execOutWriteSection(getCurrSect(out), size, &(sym->value.value), size));
+}
+
+
+
+bool execOutPutOffsSym(ExecOutput* out, const char* name, void* offset_ptr, int size, bool relative){
+    CHECK_BOOL(execOutPutSym(out, name, size, relative));
+    ExecOutSection* sect = getCurrSect(out);
+    if (memadd(((char*)sect->data) + sect->size - size, offset_ptr, size)) {
+        error_log("Overflow detected when applying offset\n");
+        return false;
+    }
+    return true;
+}
+
+bool execOutApplyPreLbls(ExecOutput* out){
+    for (RelocationEntry* rel_e = out->sym_pre_tbl.data; rel_e < out->sym_pre_tbl.data + out->sym_pre_tbl.size; rel_e++) {
+        CmpoutSymData* var_data = (((CmpoutSymData*)out->sym_pre_data.data) + rel_e->relative_to);
+        if (var_data->attr.prototype) {
+            error_log("Trying to apply pre-lbls when not all are defined\n");
+            return false;
+        }
+
+        CHECK_BOOL(relocationEntryApply(rel_e, (out->sects + rel_e->sect_id)->data, var_data->value));
+        if (var_data->attr.relocatable && !rel_e->relative) {
+            rel_e->relative_to = var_data->section_id;
+            CHECK_BOOL(relocationTableAdd(&(out->relt), rel_e));
+        }
+    }
+    out->sym_pre_tbl.size = 0;
+    out->sym_pre_data.size = 0;
+    return true;
+}
+
+bool execOutPutData(ExecOutput* out, const void* data, size_t size){
+    if (out->curr_context->sect == (size_t)-1){
+        error_log("Attempt to write data to no section\n");
+        return false;
+    }
+    return execOutWriteSection(out->sects + out->curr_context->sect, size, data, size);
 }
 
 bool execOutHandleTableInstr(ExecOutput* out, const void* instr_ptr) {
@@ -167,34 +262,36 @@ bool execOutHandleTableInstr(ExecOutput* out, const void* instr_ptr) {
             && execOutWriteSection(sect, dt_size, instr_ptr, header->size - (((char*)instr_ptr) - ((char*)header)));
     }
 
-
+    CmpoutSymEntry new_entry = {};
     switch (instr){
         case COUT_TABLE_STACK:
             if (out->curr_context->stk_size_beg != out->curr_context->stk_size_curr){
-                warn_log("Stack var def over data present in stack. This is modt probably not ok\n");
+                warn_log("Stack var def over data present in stack. This is most probably not ok\n");
             }
             if (out->curr_context->type != EOUT_CONTEXT_CB) {
                 error_log("Stack vars have to be inside CB context\n");
                 return false;
             }
             out->curr_context->stk_size_curr += *(size_t*)instr_ptr;
-            CHECK_BOOL(cmpoutSymTablePut(&(out->syms), {{-sizeof(COMPILER_NATIVE_TYPE)*(out->curr_context->stk_size_curr) , (size_t)-1, 0}, name_ptr, out->lvl, 0}));
-            
-            return true;
+            new_entry = {{-sizeof(COMPILER_NATIVE_TYPE)*(out->curr_context->stk_size_curr) , (size_t)-1, 0}, name_ptr, out->lvl, 0};
+            break;
         case COUT_TABLE_ADDSECT:
             return execoutAddSection(out, name_ptr, *((BinSectionAttr*)(instr_ptr)));
         case COUT_TABLE_SIMPLE:
-            return cmpoutSymTablePut(&(out->syms), {{*((COMPILER_NATIVE_TYPE*)instr_ptr), (size_t)-1, 0}, name_ptr, out->lvl, 0});
+            new_entry = {{*((COMPILER_NATIVE_TYPE*)instr_ptr), (size_t)-1, {0,0,0}}, name_ptr, out->lvl, 0};
+            break;
         case COUT_TABLE_HERE:
-            return cmpoutSymTablePut(&(out->syms), {{(out->sects + out->curr_context->sect)->size, out->curr_context->sect, {1,0}}, name_ptr, out->lvl, 0});
+            new_entry = {{(out->sects + out->curr_context->sect)->size, out->curr_context->sect, {1,0,0}}, name_ptr, out->lvl, 0};
+            break;
         case COUT_TABLE_PRE:
-            error_log("NYI\n");
-            return false;
+            new_entry = {{(out->sects + out->curr_context->sect)->size, out->curr_context->sect, {0,0,1}}, name_ptr, out->lvl, 0};
+            break;
         default:
             Error_log("Unknown table instr %d\n", instr);
             return false;
     }
-    assert(0);
+
+    return execOutDefSym(out, &new_entry);
 }
 
 bool execOutHandleStructInstr(ExecOutput* out, const void* instr_ptr){
@@ -290,33 +387,7 @@ bool execOutHandleStructInstr(ExecOutput* out, const void* instr_ptr){
     return true;
 }
 
-bool execOutPutSym(ExecOutput* out, const char* name, int size) {
-    if (out->curr_context->sect == (size_t)-1){
-        error_log("Attempt to write data to no section\n");
-        return false;
-    }
 
-    CmpoutSymEntry* sym = cmpoutSymTableGet(&(out->syms), name);
-
-    if (!sym) {
-        error_log("Symbol %s undefined\n", name);
-        return false;
-    }
-
-    if (sym->value.attr.relocatable) {
-        RelocationEntry entry = {out->curr_context->sect, (out->sects + out->curr_context->sect)->size, sym->value.section_id, size};
-        CHECK_BOOL(relocationTableAdd(&(out->relt), &entry))
-    }
-    return (execOutWriteSection(out->sects + out->curr_context->sect, size, &(sym->value.value), size));
-}
-
-bool execOutPutData(ExecOutput* out, const void* data, size_t size){
-    if (out->curr_context->sect == (size_t)-1){
-        error_log("Attempt to write data to no section\n");
-        return false;
-    }
-    return execOutWriteSection(out->sects + out->curr_context->sect, size, data, size);
-}
 
 bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, const void* suffix, size_t sufsize) {
     size_t all_size = prefsize;
