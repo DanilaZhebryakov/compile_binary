@@ -9,7 +9,8 @@
 #include "compiler_out_lang/emmit.h"
 
 #define F_ARGS(...) out, __VA_ARGS__ , objs, pos, expr
-#define F_DEF_ARGS CompilationOutput* out, BinTreeNode* expr , ProgramNameTable* objs, ProgramPosData* pos, BinTreeNode* oexpr, int req_val
+#define F_DEF_ARGS_BASE CompilationOutput* out, BinTreeNode* expr , ProgramNameTable* objs, ProgramPosData* pos, BinTreeNode* oexpr
+#define F_DEF_ARGS F_DEF_ARGS_BASE, int req_val
 
 #define CHECK_ERR(...) { \
     c_ret = __VA_ARGS__; \
@@ -281,13 +282,11 @@ static int compileAssignment(F_DEF_ARGS){
     return ret;
 }
 
-static int compileMathOp(F_DEF_ARGS){
+static int compileGenericOpArgs(F_DEF_ARGS_BASE){
+    assert(expr);
+    assert(expr->data.type == EXPR_OP);
+
     int ret = 0, c_ret = 0;
-    if (!req_val){
-        COMPILATION_WARN("Math op without requested value will be ignored")
-        return 0;
-    }
-    
     if ((!canExprOpBeUnary(expr->data.op)) && (!expr->left)){
         COMPILATION_ERROR("Binary-only op used as unary");
         return 1;
@@ -301,6 +300,18 @@ static int compileMathOp(F_DEF_ARGS){
         CHECK_ERR(compileCodeBlock(F_ARGS(expr->left), true))
     }
     CHECK_ERR(compileCodeBlock(F_ARGS(expr->right), true))
+
+    return ret;
+}
+
+static int compileMathOp(F_DEF_ARGS){
+    int ret = 0, c_ret = 0;
+    if (!req_val){
+        COMPILATION_WARN("Math op without requested value will be ignored")
+        return 0;
+    }
+
+    CHECK_ERR(compileGenericOpArgs(F_ARGS(expr)));
 
     switch(expr->data.op){
         case EXPR_MO_ADD:
@@ -344,6 +355,68 @@ static int compileMathOp(F_DEF_ARGS){
     return ret;
 }
 
+static int compileLogicalExpr(F_DEF_ARGS_BASE, compilerFlagCondition_t* cond) {
+    int ret = 0, c_ret = 0;
+    if (!expr) {
+        COMPILATION_WARN("Requesting logical value of nothingness. False by default\n");
+        *cond = COUT_FLAGS_NVR;
+    }
+    if (expr->data.type != EXPR_OP || !isLogicalOp(expr->data.op)) {
+        if (expr->data.type == EXPR_CONST){
+            *cond = (expr->data.val != 0) ? COUT_FLAGS_ALW : COUT_FLAGS_NVR;
+            return ret;
+        }
+        if (expr->data.type == EXPR_OP && expr->data.op == EXPR_MO_BAND) {
+            CHECK_ERR(compileGenericOpArgs(F_ARGS(expr)));
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_TST));
+            *cond = COUT_FLAGS_NE;
+            return ret;
+        }
+
+        CHECK_ERR(compileCodeBlock(F_ARGS(expr),1));
+        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DUP));
+        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_TST));
+        return ret;
+    }
+
+    if (expr->data.op == EXPR_MO_BOOL) {
+        return compileLogicalExpr(F_ARGS(expr->right), cond);
+    }
+
+    CHECK_ERR(compileGenericOpArgs(F_ARGS(expr)));
+
+    switch (expr->data.op){
+        case EXPR_MO_CEQ:
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            *cond = COUT_FLAGS_EQ;
+            break;
+        case EXPR_MO_CNE:
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            *cond = COUT_FLAGS_NE;
+            break;
+        case EXPR_MO_CGT:
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            *cond = COUT_FLAGS_GT;
+            break;
+        case EXPR_MO_CLE:
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            *cond = COUT_FLAGS_LE;
+            break;
+        case EXPR_MO_CLT:
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            *cond = COUT_FLAGS_LT;
+            break;
+        case EXPR_MO_CGE:
+            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            *cond = COUT_FLAGS_GE;
+            break;
+        default:
+            COMPILATION_ERROR("Unknown logical op: %s", exprOpName(expr->data.op));
+            return 1;
+    }
+    return ret;
+}
+
 static int compileMiscOp(F_DEF_ARGS){
     assert(expr);
     assert(expr->data.type == EXPR_OP);
@@ -352,13 +425,12 @@ static int compileMiscOp(F_DEF_ARGS){
     if (expr->data.op == EXPR_O_IF) {
         char* if_end_lbl = (char*)calloc(strlen("IF_AABBCCDDEEFFGGHH_END."), sizeof(char));
         sprintf(if_end_lbl, "IF_%lX_END", pos->lbl_id);
+        compilerFlagCondition_t flags = COUT_FLAGS_NVR;
+        CHECK_ERR (compileLogicalExpr(F_ARGS(expr->left), &flags));
 
-        CHECK_ERR (compileCodeBlock(F_ARGS(expr->left ), 1));
-        CHECK_BOOL(emmitConstInstruction(out, 0));
-        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
         CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_B));
         CHECK_BOOL(emmitTablePrototype(out, if_end_lbl));
-        CHECK_BOOL(emmitJumpInstruction_l(out, COUT_FLAGS_EQ, {}, if_end_lbl));
+        CHECK_BOOL(emmitJumpInstruction_l(out, invertFlagCondition(flags), {}, if_end_lbl));
         CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 0, true))
         CHECK_BOOL(emmitTableLbl(out, if_end_lbl));
         CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_E));
@@ -366,7 +438,7 @@ static int compileMiscOp(F_DEF_ARGS){
         return ret;
     }
 
-    COMPILATION_ERROR("Unknown misc op for code: %s\n", expr->data.name);
+    COMPILATION_ERROR("Unknown misc op for code: %s\n", exprOpName(expr->data.op));
     return false;
 }
 
