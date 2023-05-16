@@ -5,7 +5,7 @@
 
 bool emmitGenericInstruction(CompilationOutput* out, compilerGenericInstr_t instr);
 
-bool emmitJumpInstruction_l(CompilationOutput* out, compilerJumpType_t jump, CompilerMemArgAttr attr, const char* lbl);
+bool emmitJumpInstruction_l(CompilationOutput* out, compilerFlagCondition_t jump, CompilerMemArgAttr attr, const char* lbl);
 
 bool emmitMemInstruction_l(CompilationOutput* out, CompilerMemArgAttr attr, bool store, const char* lbl);
 bool emmitMemInstruction(CompilationOutput* out, CompilerMemArgAttr attr, bool store, COMPILER_NATIVE_TYPE addr);

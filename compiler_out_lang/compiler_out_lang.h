@@ -113,27 +113,27 @@ struct CompilerMemArgAttr {
     bool lbl:1;
 };
 
-struct CompilerJumpTypeInfo {
+struct CompilerFlagConditionInfo {
     const char* name;
     int code;
 };
 
 
-enum compilerJumpType_t {
-    COUT_JUMP_NVR = 0,
-    COUT_JUMP_ALW = 1,
+enum compilerFlagCondition_t {
+    COUT_FLAGS_NVR = 0,
+    COUT_FLAGS_ALW = 1,
 
-    COUT_JUMP_EQ  = 2,
-    COUT_JUMP_NE  = 3,
+    COUT_FLAGS_EQ  = 2,
+    COUT_FLAGS_NE  = 3,
 
-    COUT_JUMP_GT  = 4,
-    COUT_JUMP_LE  = 5,
+    COUT_FLAGS_GT  = 4,
+    COUT_FLAGS_LE  = 5,
 
-    COUT_JUMP_GE  = 6,
-    COUT_JUMP_LT  = 7    
+    COUT_FLAGS_GE  = 6,
+    COUT_FLAGS_LT  = 7    
 };
 
-extern const CompilerJumpTypeInfo jmp_type_info[];
+extern const CompilerFlagConditionInfo flag_cond_info[];
 
 enum binSectionFillType_t {
     BIN_SECTION_ZEROED = 0,
@@ -171,7 +171,7 @@ struct CompilationOutput {
 
 const char* getInstrTypeName(compilerInstrType_t type);
 
-compilerJumpType_t invertJumpType(compilerJumpType_t jmp_type);
+compilerFlagCondition_t invertFlagCondition(compilerFlagCondition_t jmp_type);
 
 bool compilationOutputCtor(CompilationOutput* out);
 void compilationOutputDtor(CompilationOutput* out);

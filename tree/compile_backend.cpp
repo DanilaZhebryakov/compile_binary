@@ -358,7 +358,7 @@ static int compileMiscOp(F_DEF_ARGS){
         CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
         CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_B));
         CHECK_BOOL(emmitTablePrototype(out, if_end_lbl));
-        CHECK_BOOL(emmitJumpInstruction_l(out, COUT_JUMP_EQ, {}, if_end_lbl));
+        CHECK_BOOL(emmitJumpInstruction_l(out, COUT_FLAGS_EQ, {}, if_end_lbl));
         CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 0, true))
         CHECK_BOOL(emmitTableLbl(out, if_end_lbl));
         CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_E));

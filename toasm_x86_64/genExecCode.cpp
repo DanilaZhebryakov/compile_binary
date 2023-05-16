@@ -182,8 +182,8 @@ static bool translateJumpInstr(ExecOutput* out, void* instr_ptr) {
     assert(header->type == COUT_TYPE_JMP);
     instr_ptr = ((char*)instr_ptr) + sizeof(CompilerInstrHeader);
 
-    compilerJumpType_t instr = *(compilerJumpType_t*)instr_ptr;
-    instr_ptr = ((char*)instr_ptr) + sizeof(instr);
+    compilerFlagCondition_t flagc = *(compilerFlagCondition_t*)instr_ptr;
+    instr_ptr = ((char*)instr_ptr) + sizeof(flagc);
 
     CompilerMemArgAttr* jmp_arg = (CompilerMemArgAttr*) instr_ptr;
     instr_ptr = ((char*)instr_ptr) + sizeof(*jmp_arg);
@@ -195,8 +195,8 @@ static bool translateJumpInstr(ExecOutput* out, void* instr_ptr) {
 
 
     if (jmp_arg->mod_arg || jmp_arg->mod_bp) {
-        instr = invertJumpType(instr);
-        CHECK_BOOL(execOutPutData(out, shortJmpBinCodes[instr].data, shortJmpBinCodes[instr].size));
+        flagc = invertFlagCondition(flagc);
+        CHECK_BOOL(execOutPutData(out, shortJmpBinCodes[flagc].data, shortJmpBinCodes[flagc].size));
         CHECK_BOOL(execOutPutData(out, "\0", 1)); //helper jump offset. Replace it later
         ExecOutSection* curr_sect = (out->sects + out->curr_context->sect);
         size_t jmp_skip_byte_i = curr_sect->size - 1;
@@ -204,7 +204,7 @@ static bool translateJumpInstr(ExecOutput* out, void* instr_ptr) {
         ((char*)curr_sect->data)[jmp_skip_byte_i] = curr_sect->size - jmp_skip_byte_i-1;
         return true;
     }
-    CHECK_BOOL(execOutPutData(out, longJmpBinCodes[instr].data, longJmpBinCodes[instr].size));
+    CHECK_BOOL(execOutPutData(out, longJmpBinCodes[flagc].data, longJmpBinCodes[flagc].size));
     long long rel_base = -((out->sects + out->curr_context->sect)->size + 4);
     if (jmp_arg->lbl) {
         return execOutPutOffsSym(out, (const char*)instr_ptr, &rel_base, 4, true);

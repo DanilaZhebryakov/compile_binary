@@ -9,7 +9,7 @@ bool emmitGenericInstruction(CompilationOutput* out, compilerGenericInstr_t inst
     return EXPAND_COMPILATION_OUTPUT(out, &instr);
 }
 
-bool emmitJumpInstruction_l(CompilationOutput* out, compilerJumpType_t jump, CompilerMemArgAttr attr, const char* lbl){
+bool emmitJumpInstruction_l(CompilationOutput* out, compilerFlagCondition_t jump, CompilerMemArgAttr attr, const char* lbl){
     attr.lbl = true;
     int lbl_len = strlen(lbl);
     CompilerInstrHeader header = {sizeof(header) + sizeof(jump) + sizeof(attr) + lbl_len + 1, getMemArgArgc(attr), 0, false, COUT_TYPE_JMP};

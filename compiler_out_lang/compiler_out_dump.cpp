@@ -129,7 +129,7 @@ void printCompilerInstruction(FILE* file, void* instr_ptr){
             fprintf(file, "%s", (char*)instr_ptr);
             break;
         case COUT_TYPE_JMP:
-            fprintf(file, "%s ", jmp_type_info[*((compilerJumpType_t*)instr_ptr)].name);
+            fprintf(file, "%s ", flag_cond_info[*((compilerFlagCondition_t*)instr_ptr)].name);
             /* FALLTHRU */
         case COUT_TYPE_LOAD:
             /* FALLTHRU */
