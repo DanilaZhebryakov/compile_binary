@@ -229,12 +229,12 @@ static bool addRspMoveInstr(ExecOutput* out, long int move){
 
     if (move < 256) {
         CHECK_BOOL(execOutPutData(out, dir ? "\x48\x83\xEC" : "\x48\x83\xC4", 3)); // (sub:add) rsp, imm8
-        CHECK_BOOL(execOutPutData(out, &move, 1)); // big endian is good for this. Lower bytes are moved
+        CHECK_BOOL(execOutPutData(out, &move, 1));
         return true;
     }
 
     CHECK_BOOL(execOutPutData(out,  dir ? "\x48\x81\xEC" : "\x48\x81\xC4", 3)); // (sub:add) rsp, imm32
-    CHECK_BOOL(execOutPutData(out, &move, 4)); // big endian is good for this. Lower bytes are moved
+    CHECK_BOOL(execOutPutData(out, &move, 4));
     return true;
 }
 
@@ -340,17 +340,22 @@ bool translateInstruction_x86_64(ExecOutput* out, void* instr_ptr) {
 }
 
 bool translateCompilerOutput_x86_64(ExecOutput* out, CompilationOutput* in) {
-    void* next_instr_ptr = in->data;
+    void* curr_instr_ptr = in->data;
+    void* next_instr_ptr = ((char*)curr_instr_ptr) + ((CompilerInstrHeader*)curr_instr_ptr)->size;
     void* data_end = ((char*)in->data) + in->size;
 
-    while (next_instr_ptr < data_end) {
-        if (!translateInstruction_x86_64(out, next_instr_ptr))
+    while (next_instr_ptr <= data_end) {
+        if (!translateInstruction_x86_64(out, curr_instr_ptr))
             return false;
-        next_instr_ptr = ((char*)next_instr_ptr) + ((CompilerInstrHeader*)next_instr_ptr)->size;
+        curr_instr_ptr = next_instr_ptr;
+        if (curr_instr_ptr >= data_end) {
+            break;
+        }
+        next_instr_ptr = ((char*)curr_instr_ptr) + ((CompilerInstrHeader*)curr_instr_ptr)->size;
     }
-    if (next_instr_ptr != data_end){
-        error_log("Data ended incorrectly: %ld bytes past the end\n", ((char*)next_instr_ptr) - ((char*)data_end));
-        return true;
+    if (next_instr_ptr != curr_instr_ptr){
+        error_log("Data ended incorrectly: instruction at (%ld/%ld) bytes over the end\n", (char*)curr_instr_ptr - ((char*)data_end), (char*)curr_instr_ptr - ((char*)data_end));
+        return false;
     }
     return true;
 }
