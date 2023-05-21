@@ -4,6 +4,7 @@
 #include "compile_backend.h"
 #include "compiler_out_lang/compiler_out_dump.h"
 #include "compiler_out_lang/jit_run.h"
+#include "compiler_out_lang/createElfFile.h"
 #include "toasm_x86_64/genExecCode.h"
 
 #include "expr/formule_utils.h"
@@ -53,7 +54,13 @@ int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
     if (translateCompilerOutput_x86_64(&exec, &cmp_out)) {
         execOutApplyPreLbls(&exec);
         if (execOutPrepareCode(&exec, x86_jit_prefix, sizeof(x86_jit_prefix), x86_jit_suffix, sizeof(x86_jit_suffix))) {
-            execOutputJitRun(&exec);
+            //execOutputJitRun(&exec);
+            if (createExecElfFile(&exec, "Program")) {
+                printf("ELF Success\n");
+            }
+            else {
+                printf("ELF Fail\n");
+            }
         }
         else{
             printf("code prepare failed\n");

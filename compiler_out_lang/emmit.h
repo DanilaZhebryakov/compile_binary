@@ -26,4 +26,7 @@ bool emmitTableSectVar(CompilationOutput* out, const char* name, size_t vsize, c
 
 bool emmitAddSection(CompilationOutput* out, const char* name, BinSectionAttr attr);
 
+bool emmitRetInstruction(CompilationOutput* out, int retc, bool retf);
+bool emmitCallInstruction(CompilationOutput* out, int argc, int retc, const char* name);
+
 #endif

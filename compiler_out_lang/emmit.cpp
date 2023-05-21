@@ -22,7 +22,6 @@ bool emmitJumpInstruction_l(CompilationOutput* out, compilerFlagCondition_t jump
     return expandCompilationOutput(out, lbl, lbl_len + 1);
 }
 
-
 bool emmitMemInstruction_l(CompilationOutput* out, CompilerMemArgAttr attr, bool store, const char* lbl) {
     attr.lbl = true;
     int lbl_len = strlen(lbl);
@@ -118,4 +117,27 @@ bool emmitAddSection(CompilationOutput* out, const char* name, BinSectionAttr at
     if (!emmitTableSomething(out, COUT_TABLE_ADDSECT, name, sizeof(attr)))
         return false;
     return EXPAND_COMPILATION_OUTPUT(out, &attr);
+}
+
+bool emmitRetInstruction(CompilationOutput* out, int retc, bool retf) {
+    compilerSpecialInstr_t instr = retf ? COUT_SPEC_RETF : COUT_SPEC_RETCB;
+    CompilerInstrHeader header = {sizeof(header) + sizeof(instr), retc , 0,  false, COUT_TYPE_SPECIAL};
+
+    if (!EXPAND_COMPILATION_OUTPUT(out, &header))
+        return false;
+
+    return EXPAND_COMPILATION_OUTPUT(out, &instr);
+}
+
+bool emmitCallInstruction(CompilationOutput* out, int argc, int retc, const char* name) {
+    compilerSpecialInstr_t instr = COUT_SPEC_CALL;
+    int name_len = strlen(name);
+    CompilerInstrHeader header = {sizeof(header) + sizeof(instr) + name_len , argc , retc, false, COUT_TYPE_SPECIAL};
+
+    if (!EXPAND_COMPILATION_OUTPUT(out, &header))
+        return false;
+
+    if (!EXPAND_COMPILATION_OUTPUT(out, &instr))
+        return false;
+    return expandCompilationOutput(out, name, name_len+1);
 }

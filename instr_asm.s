@@ -62,3 +62,4 @@ section .text
         syscall
         cmp rax, rdx
         test rax, rdx
+        pop r9

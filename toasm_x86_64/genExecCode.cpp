@@ -1,6 +1,7 @@
 #include <assert.h>
 
 #include "compiler_out_lang/exec_output.h"
+#include "compiler_out_lang/compiler_out_dump.h"
 
 #include "bool_check_define.h"
 
@@ -9,6 +10,29 @@
 #ifdef DEBUG_MODE
 #include "compiler_out_lang/compiler_out_dump.h"
 #endif
+
+#define DEF_END_PTR() char* end_ptr = ((char*) header) + header->size;
+
+#define SIZE_LEFT (((char*)end_ptr) - ((char*)instr_ptr))
+#define SIZE_LEFT_I ((int)SIZE_LEFT)
+
+#define CHK_SIZE_CORRECT() \
+{                        \
+    if (SIZE_LEFT < 0) { \
+        error_log("Unexpected instruction end\n"); \
+        printCompilerInstruction(stderr, header);  \
+        return false;    \
+    }                    \
+}
+
+#define CHK_SIZE_ENOUGH(val)    { \
+    if (SIZE_LEFT < (long int)sizeof(val)) { \
+        error_log("Unexpected instruction end\n"); \
+        printCompilerInstruction(stderr, header);  \
+        return false; \
+    } \
+}
+
 struct InstructionBinCode {
     size_t size;
     const char* data;
@@ -67,6 +91,38 @@ static bool translateGenericInstr(ExecOutput* out, void* instr_ptr) {
         return false;
     }
     return execOutPutData(out, ginstrBinCodes[instr].data, ginstrBinCodes[instr].size);
+}
+
+char arg_reg_n[] = { 0x0, 0x7, 0x6, 0x2, 0x1, 0x8, 0x9}; //rax, rdi, rsi, rdx, rcx, r8, r9
+int arg_reg_cnt = sizeof(arg_reg_n);
+
+static bool addArgRetEncode(ExecOutput* out, int count, bool ret) {
+    assert(count <= (arg_reg_cnt - !ret));
+    if (!ret) {
+        CHECK_BOOL(execOutPutData(out, "\x48\x31\x00", 1));
+    }
+    for (int i = !ret; i < count; i++) {
+        if (arg_reg_n[i] & 0x8){
+            CHECK_BOOL(execOutPutData(out, "\x41", 1)); // rex prefix if needed
+        }
+        char op = 0x58;
+        op += (arg_reg_n[i] & 0x7);
+        CHECK_BOOL(execOutPutData(out, &op, 1));
+    }
+    return true;
+}
+
+static bool addArgRetDecode(ExecOutput* out, int count, bool ret) {
+    assert(count <= (arg_reg_cnt - !ret));
+    for (int i = !ret; i < count; i++) {
+        if (arg_reg_n[i] & 0x8){
+            CHECK_BOOL(execOutPutData(out, "\x41", 1)); // rex prefix if needed
+        }
+        char op = 0x50;
+        op += (arg_reg_n[i] & 0x7);
+        CHECK_BOOL(execOutPutData(out, &op, 1));
+    }
+    return true;
 }
 
 struct x86MemArgByteModrm {
@@ -185,6 +241,10 @@ static bool translateJumpInstr(ExecOutput* out, void* instr_ptr) {
     compilerFlagCondition_t flagc = *(compilerFlagCondition_t*)instr_ptr;
     instr_ptr = ((char*)instr_ptr) + sizeof(flagc);
 
+    if (flagc == COUT_FLAGS_NVR) {
+        return true;
+    }
+
     CompilerMemArgAttr* jmp_arg = (CompilerMemArgAttr*) instr_ptr;
     instr_ptr = ((char*)instr_ptr) + sizeof(*jmp_arg);
 
@@ -192,7 +252,6 @@ static bool translateJumpInstr(ExecOutput* out, void* instr_ptr) {
         error_log("Invalid jump target attr\n");
         return false;
     }
-
 
     if (jmp_arg->mod_arg || jmp_arg->mod_bp) {
         flagc = invertFlagCondition(flagc);
@@ -240,13 +299,15 @@ static bool addRspMoveInstr(ExecOutput* out, long int move){
 
 static bool translateStructInstr(ExecOutput* out, void* instr_ptr) {
     CompilerInstrHeader* header = ((CompilerInstrHeader*)instr_ptr);
+    DEF_END_PTR()
+    CHK_SIZE_ENOUGH(compilerStructureInstr_t)
     compilerStructureInstr_t instr = *(compilerStructureInstr_t*)(((char*)instr_ptr) + sizeof(*header));
 
     assert(header->type == COUT_TYPE_STRUCT);
 
-    assert(header->argc == 0);
-    assert(header->retc == 0); //NYI
-
+    if (header->argc) {
+        CHECK_BOOL(addArgRetEncode(out, header->argc, false));
+    }
 
     if (instr & COUT_STRUCT_END_MASK) {
         if (instr != COUT_STRUCT_ADDSF) {
@@ -270,7 +331,38 @@ static bool translateStructInstr(ExecOutput* out, void* instr_ptr) {
             break;
     }
 
+    if (header->retc) {
+        CHECK_BOOL(addArgRetDecode(out, header->retc, false))
+    }
     return execOutHandleStructInstr(out, instr_ptr);
+}
+
+static bool translateSpecialInstr(ExecOutput* out, void* instr_ptr) {
+    CompilerInstrHeader* header = ((CompilerInstrHeader*)instr_ptr);
+    DEF_END_PTR()
+    CHK_SIZE_ENOUGH(compilerSpecialInstr_t)
+    compilerSpecialInstr_t instr = *(compilerSpecialInstr_t*)(((char*)instr_ptr) + sizeof(*header));
+    if (instr == COUT_SPEC_RETCB) {
+        CHECK_BOOL(addArgRetEncode(out, header->argc, true));
+        char lbl[16] = {};
+        sprintf(lbl, "EOCB%d", 1);
+        CHECK_BOOL(execOutPutData(out, "\xE9", 1));
+        long long rel_base = -((out->sects + out->curr_context->sect)->size + 4);
+        return execOutPutOffsSym(out, (const char*)lbl, &rel_base, 4, true);
+    }
+    if (instr == COUT_SPEC_RETF) {
+        CHECK_BOOL(addArgRetEncode(out, header->argc, true));
+        return execOutPutData(out, "\xC3", 1);
+    }
+    if (instr == COUT_SPEC_CALL) {
+        CHECK_BOOL(addArgRetEncode(out, header->argc, false));
+        CHECK_BOOL(execOutPutData (out, "\xE8", 1));
+        long long rel_base = -((out->sects + out->curr_context->sect)->size + 4);
+        CHECK_BOOL(execOutPutOffsSym(out, (const char*)instr_ptr, &rel_base, 4, true));
+        return addArgRetDecode(out, header->retc, true);
+    }
+    error_log("Unknown special instruction\n");
+    return false;
 }
 
 static bool translateTableInstr(ExecOutput* out, void* instr_ptr) {
@@ -330,7 +422,8 @@ bool translateInstruction_x86_64(ExecOutput* out, void* instr_ptr) {
             ret = translateStructInstr(out, instr_ptr);
             break;
         case COUT_TYPE_SPECIAL:
-            assert(0); //NYI
+            ret = translateSpecialInstr(out, instr_ptr);
+            break;
         default:
             error_log("Bad instruction type%d\n", header->type);
             return false;

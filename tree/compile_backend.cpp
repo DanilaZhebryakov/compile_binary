@@ -127,6 +127,40 @@ static int compileCodeBlock(F_DEF_ARGS, bool force = false){
     return ret;
 }
 
+static int compileFuncDef(F_DEF_ARGS) {
+    int ret = 0, c_ret = 0;
+
+    assert(expr);
+    assert(expr->data.type == EXPR_OP);
+    assert(expr->data.op == EXPR_O_FDEF);
+
+    if (!(expr->right) || (expr->right->data.type != EXPR_OP) || (expr->right->data.op != EXPR_O_SEP)) {
+        COMPILATION_ERROR("Sep needed\n");
+        return 1;
+    }
+    if (!(expr->right->left) || (expr->right->left->data.type != EXPR_VAR)) {
+        COMPILATION_ERROR("Bad func name\n");
+        return 1;
+    }
+    CHECK_BOOL(emmitSetSection(out, "funcs"));
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_ADDSF));
+
+    FuncData func = {};
+    func.attr.acc_type = VAL_ACC_VOLATILE;
+    func.attr.varfunc = false;
+    func.attr.arg_cnt = VF_VAL_NONE;
+    func.attr.ret_cnt = VF_VAL_NONE;
+
+    CHECK_BOOL(programCreateFunc(objs, pos, expr->right->left->data.name, &func, false));
+
+    CHECK_ERR(compileCodeBlock(F_ARGS(expr->right->right), req_val));
+
+    CHECK_BOOL(emmitRetInstruction(out, 0, true));
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RMSF));
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_SECT_E));
+    return true;
+}
+
 static int compileVarNode(F_DEF_ARGS, int write_c){
     int ret = 0, c_ret = 0;
     VarEntry* var = varTableGet(objs->vars, expr->data.name);

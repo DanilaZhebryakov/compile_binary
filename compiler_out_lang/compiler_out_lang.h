@@ -99,7 +99,8 @@ enum compilerStructureInstr_t {
 
 enum compilerSpecialInstr_t {
     COUT_SPEC_RETCB = 1,
-    COUT_SPEC_RETF  = 2
+    COUT_SPEC_RETF  = 2,
+    COUT_SPEC_CALL  = 3
 };
 
 struct CompilerMemArgAttr {
