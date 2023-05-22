@@ -59,7 +59,7 @@ static int compileVarAcc(CompilationOutput* out, VarEntry* var, ProgramNameTable
     mem_acc_attr.volat  = var->value.attr.acc_type == VAL_ACC_VOLATILE;
     mem_acc_attr.const_ = var->value.attr.acc_type == VAL_ACC_CONST;
 
-    if (!emmitMemInstruction_l(out, mem_acc_attr , write, var->value.lbl))
+    if (!emitMemInstruction_l(out, mem_acc_attr , write, var->value.lbl))
         return -1;
 
     return 0;
@@ -85,7 +85,7 @@ static int compileVarDef(F_DEF_ARGS){
 
     if (!programCreateVar(objs, pos, expr->data.name, &var_data, false))
         return -1;
-    if (!emmitTableStackVar(out, var_data.lbl, var_data.bsize * var_data.elcnt))
+    if (!emitTableStackVar(out, var_data.lbl, var_data.bsize * var_data.elcnt))
         return -1;
     return ret;
 }
@@ -127,10 +127,10 @@ static int compileKVarNode(F_DEF_ARGS, int write_c) {
     int ret = 0;
     if (expr->data.kword == EXPR_KW_CIO) {
         for (int i = 0; i < write_c; i++){
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_OUT));;
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_OUT));;
         }
         for (int i = 0; i < req_val; i++){
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_IN));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_IN));
         }
         return ret;
     }
@@ -141,7 +141,7 @@ static int compileKVarNode(F_DEF_ARGS, int write_c) {
             COMPILATION_ERROR("Nothing to read\n")
         }
         for (int i = 0; i < write_c; i++){
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_IN));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_IN));
         }
         return ret;
     }
@@ -150,30 +150,30 @@ static int compileKVarNode(F_DEF_ARGS, int write_c) {
             COMPILATION_ERROR("Bad use of trap\n");
             return 1;
         }
-        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_TRAP));
+        CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_TRAP));
         return ret;
     }
     if (expr->data.kword == EXPR_KW_BAD){
-        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_BAD));
+        CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_BAD));
         return ret;
     }
     if (expr->data.kword == EXPR_KW_EXIT){
         if (write_c == 0){
-            CHECK_BOOL(emmitConstInstruction(out, 0));
+            CHECK_BOOL(emitConstInstruction(out, 0));
         }
         if (write_c > 1) {
             COMPILATION_WARN("More than 1 value passed to exit. Using first.\n");
             for (int i = 1; i < write_c; i++) {
-                CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_POP));
+                CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_POP));
             }
         }
 
-        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_END));
+        CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_END));
         if (req_val > 0) {
             COMPILATION_WARN("Values requested from exit. Ofc it does not matter, but these values don't exist.\n");
-            CHECK_BOOL(emmitConstInstruction(out, 0));
+            CHECK_BOOL(emitConstInstruction(out, 0));
             for (int i = 1; i < req_val; i++) {
-                CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DUP));
+                CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_DUP));
             }
         }
         return ret;
@@ -189,9 +189,9 @@ static int compileConstNode(F_DEF_ARGS) {
     if (req_val == 0){
         return 0;
     }
-    CHECK_BOOL(emmitConstInstruction(out, expr->data.val));
+    CHECK_BOOL(emitConstInstruction(out, expr->data.val));
     for (int i = 1; i < req_val; i++) {
-        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DUP));
+        CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_DUP));
     }
     return 0;
 }
@@ -225,20 +225,20 @@ static int compileCodeBlock(F_DEF_ARGS, bool force = false){
     (pos->lbl_id)++;
 
     if (req_val == 0){
-        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NCB_B));
+        CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_NCB_B));
     }
     else{
-        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RCB_B));
+        CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_RCB_B));
     }
 
-    CHECK_BOOL(emmitTablePrototype(out, cb_end_lbl))
+    CHECK_BOOL(emitTablePrototype(out, cb_end_lbl))
     CHECK_ERR (compileCode(F_ARGS(expr), req_val))
-    CHECK_BOOL(emmitTableLbl(out, cb_end_lbl))
+    CHECK_BOOL(emitTableLbl(out, cb_end_lbl))
 
     assert_ret(programDescendLvl(objs, pos),-1);
     pos->lvl--;
     
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_CB_E, 0, req_val));
+    CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_CB_E, 0, req_val));
     
 
     pos->code_block_id = old_cb_id;
@@ -261,7 +261,7 @@ static int compileSetDst(F_DEF_ARGS, int write_c){
                     COMPILATION_ERROR("NYI\n")
                     return 1;
                 }
-                if (!emmitGenericInstruction(out, COUT_GINSTR_DUP))
+                if (!emitGenericInstruction(out, COUT_GINSTR_DUP))
                     return -1;
                 CHECK_ERR(compileSetDst(F_ARGS(expr->left), 0, write_c))
                 CHECK_ERR(compileSetDst(F_ARGS(expr->left), req_val, write_c))
@@ -271,7 +271,7 @@ static int compileSetDst(F_DEF_ARGS, int write_c){
                     COMPILATION_ERROR("NYI\n")
                     return 1;
                 }
-                if (!emmitGenericInstruction(out, COUT_GINSTR_DUP))
+                if (!emitGenericInstruction(out, COUT_GINSTR_DUP))
                     return -1;
                 CHECK_ERR(compileSetDst(F_ARGS(expr->left), req_val, write_c))
                 CHECK_ERR(compileSetDst(F_ARGS(expr->left), 0      , write_c))
@@ -330,7 +330,7 @@ static int compileFuncDefArgs(F_DEF_ARGS_BASE, int* arg_cnt){
             var_data.elcnt = 1;
             var_data.attr = {VAL_ACC_NORMAL, true, false, false};
             CHECK_BOOL(programCreateVar(objs, pos, expr->data.name, &var_data, false))
-            CHECK_BOOL(emmitTableConstant(out, var_data.lbl, sizeof(COMPILER_NATIVE_TYPE)*(*arg_cnt)));
+            CHECK_BOOL(emitTableConstant(out, var_data.lbl, sizeof(COMPILER_NATIVE_TYPE)*(*arg_cnt)));
             (*arg_cnt)++;
             return ret;
         }
@@ -370,11 +370,11 @@ static int compileFuncDef(F_DEF_ARGS) {
 
     FuncEntry* entry = funcTableGetLast(objs->funcs);
 
-    CHECK_BOOL(emmitTablePrototype(out, entry->value.lbl));
-    CHECK_BOOL(emmitSetSection(out, "funcs"));
-    CHECK_BOOL(emmitTableLbl(out, entry->value.lbl));
+    CHECK_BOOL(emitTablePrototype(out, entry->value.lbl));
+    CHECK_BOOL(emitSetSection(out, "funcs"));
+    CHECK_BOOL(emitTableLbl(out, entry->value.lbl));
     size_t func_header_offset = out->size; // currently arg count is unknown, need to modify it later
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_ADDSF, 0, 0));
+    CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_ADDSF, 0, 0));
     
     if (expr->right->left) {
         int argc = 0;
@@ -390,9 +390,9 @@ static int compileFuncDef(F_DEF_ARGS) {
 
     CHECK_ERR(compileCodeBlock(F_ARGS(expr->right->right), req_val));
 
-    CHECK_BOOL(emmitRetInstruction(out, 0, true));
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RMSF));
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_SECT_E));
+    CHECK_BOOL(emitRetInstruction(out, 0, true));
+    CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_RMSF));
+    CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_SECT_E));
     return ret;
 }
 
@@ -414,7 +414,7 @@ static int compileFuncCall(F_DEF_ARGS){
         return 1;
     }
 
-    CHECK_BOOL(emmitCallInstruction(out, arg_cnt, req_val, func->value.lbl));
+    CHECK_BOOL(emitCallInstruction(out, arg_cnt, req_val, func->value.lbl));
 
     return ret;
 }
@@ -430,7 +430,7 @@ static int compileAssignment(F_DEF_ARGS){
 
     if (expr->data.op == EXPR_O_EQARTL) {
         CHECK_ERR(compileCodeBlock(F_ARGS(expr->left), 1))
-        if (!emmitGenericInstruction(out, COUT_GINSTR_ADD))
+        if (!emitGenericInstruction(out, COUT_GINSTR_ADD))
             return -1;
     }
     CHECK_ERR(compileSetDst(F_ARGS(expr->left), req_val, 1))
@@ -470,16 +470,16 @@ static int compileMathOp(F_DEF_ARGS){
 
     switch(expr->data.op){
         case EXPR_MO_ADD:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_ADD));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_ADD));
             break;
         case EXPR_MO_SUB:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_SUB));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_SUB));
             break;
         case EXPR_MO_MUL:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_MUL));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_MUL));
             break;
         case EXPR_MO_DIV:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DIV));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_DIV));
             break;
         /*
         case EXPR_MO_POW:
@@ -523,14 +523,14 @@ static int compileLogicalExpr(F_DEF_ARGS_BASE, compilerFlagCondition_t* cond) {
         }
         if (expr->data.type == EXPR_OP && expr->data.op == EXPR_MO_BAND) {
             CHECK_ERR(compileGenericOpArgs(F_ARGS(expr)));
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_TST));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_TST));
             *cond = COUT_FLAGS_NE;
             return ret;
         }
 
         CHECK_ERR(compileCodeBlock(F_ARGS(expr),1));
-        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DUP));
-        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_TST));
+        CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_DUP));
+        CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_TST));
         return ret;
     }
 
@@ -542,27 +542,27 @@ static int compileLogicalExpr(F_DEF_ARGS_BASE, compilerFlagCondition_t* cond) {
 
     switch (expr->data.op){
         case EXPR_MO_CEQ:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_CMP));
             *cond = COUT_FLAGS_EQ;
             break;
         case EXPR_MO_CNE:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_CMP));
             *cond = COUT_FLAGS_NE;
             break;
         case EXPR_MO_CGT:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_CMP));
             *cond = COUT_FLAGS_GT;
             break;
         case EXPR_MO_CLE:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_CMP));
             *cond = COUT_FLAGS_LE;
             break;
         case EXPR_MO_CLT:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_CMP));
             *cond = COUT_FLAGS_LT;
             break;
         case EXPR_MO_CGE:
-            CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_CMP));
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_CMP));
             *cond = COUT_FLAGS_GE;
             break;
         default:
@@ -584,12 +584,12 @@ static int compileMiscOp(F_DEF_ARGS){
         compilerFlagCondition_t flags = COUT_FLAGS_NVR;
         CHECK_ERR (compileLogicalExpr(F_ARGS(expr->left), &flags));
 
-        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_B));
-        CHECK_BOOL(emmitTablePrototype(out, if_end_lbl));
-        CHECK_BOOL(emmitJumpInstruction_l(out, invertFlagCondition(flags), {}, if_end_lbl));
+        CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_NONLIN_B));
+        CHECK_BOOL(emitTablePrototype(out, if_end_lbl));
+        CHECK_BOOL(emitJumpInstruction_l(out, invertFlagCondition(flags), {}, if_end_lbl));
         CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 0, true))
-        CHECK_BOOL(emmitTableLbl(out, if_end_lbl));
-        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_E));
+        CHECK_BOOL(emitTableLbl(out, if_end_lbl));
+        CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_NONLIN_E));
         return ret;
     }
 
@@ -600,16 +600,16 @@ static int compileMiscOp(F_DEF_ARGS){
         sprintf(while_mid_lbl, "!WHL_%lX_MID", pos->lbl_id);
         (pos->lbl_id)++;
 
-        CHECK_BOOL(emmitTablePrototype(out, while_mid_lbl));
-        CHECK_BOOL(emmitJumpInstruction_l(out, COUT_FLAGS_ALW, {}, while_mid_lbl))
-        CHECK_BOOL(emmitTableLbl(out, while_beg_lbl));
+        CHECK_BOOL(emitTablePrototype(out, while_mid_lbl));
+        CHECK_BOOL(emitJumpInstruction_l(out, COUT_FLAGS_ALW, {}, while_mid_lbl))
+        CHECK_BOOL(emitTableLbl(out, while_beg_lbl));
 
         CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 0, true))
 
-        CHECK_BOOL(emmitTableLbl(out, while_mid_lbl));
+        CHECK_BOOL(emitTableLbl(out, while_mid_lbl));
         compilerFlagCondition_t flags = COUT_FLAGS_NVR;
         CHECK_ERR (compileLogicalExpr(F_ARGS(expr->left), &flags));
-        CHECK_BOOL(emmitJumpInstruction_l(out, flags, {}, while_beg_lbl))
+        CHECK_BOOL(emitJumpInstruction_l(out, flags, {}, while_beg_lbl))
         return ret;
     }
 
@@ -676,16 +676,16 @@ int compileProgram(CompilationOutput* out, BinTreeNode* code) {
     programNameTableCtor(&objs);
     programPosDataCtor(&pos);
 
-    CHECK_BOOL(emmitAddSection(out, "main" , BIN_SECTION_PRESET_MAIN)); // register main code section
-    CHECK_BOOL(emmitAddSection(out, "funcs", BIN_SECTION_PRESET_FUNC)); // register main code section
+    CHECK_BOOL(emitAddSection(out, "main" , BIN_SECTION_PRESET_MAIN)); // register main code section
+    CHECK_BOOL(emitAddSection(out, "funcs", BIN_SECTION_PRESET_FUNC)); // register main code section
     
-    CHECK_BOOL(emmitSetSection(out, "main"));                          // set as current
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_ADDSF));    // set stack frame
+    CHECK_BOOL(emitSetSection(out, "main"));                          // set as current
+    CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_ADDSF));    // set stack frame
 
     CHECK_ERR(compileCodeBlock(out, code, &objs, &pos, code, 0));
 
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RMSF  ));    // end stack frame
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_SECT_E));    // end of main
+    CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_RMSF  ));    // end stack frame
+    CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_SECT_E));    // end of main
 
     programPosDataDtor(&pos);
     programNameTableDtor(&objs);
