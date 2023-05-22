@@ -53,9 +53,9 @@ int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
     execOutCtor(&exec);
     if (translateCompilerOutput_x86_64(&exec, &cmp_out)) {
         execOutApplyPreLbls(&exec);
-        if (execOutPrepareCode(&exec, x86_jit_prefix, sizeof(x86_jit_prefix), x86_jit_suffix, sizeof(x86_jit_suffix))) {
+        if (execOutPrepareCode(&exec, "", 0, x86_jit_suffix, sizeof(x86_jit_suffix))) {
             //execOutputJitRun(&exec);
-            if (createExecElfFile(&exec, "Program")) {
+            if (createExecElfFile(&exec, "Program") == 0) {
                 printf("ELF Success\n");
             }
             else {

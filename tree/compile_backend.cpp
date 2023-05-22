@@ -90,77 +90,6 @@ static int compileVarDef(F_DEF_ARGS){
     return ret;
 }
 
-static int compileCodeBlock(F_DEF_ARGS, bool force = false){
-    if (expr == nullptr) {
-        if (req_val == 0) {
-            return 0;
-        }
-        else{
-            expr = oexpr;
-            COMPILATION_ERROR("Empty expression can not return any values\n");
-            return 1;
-        }
-    }
-
-    if (!force && (expr->data.type != EXPR_OP || expr->data.op != EXPR_O_ENDL)){
-        return compileCode(F_ARGS(expr), req_val);
-    }
-
-    int ret = 0, c_ret = 0;
-    
-    assert_ret(programAscendLvl(objs, pos), -1);
-    pos->lvl++;
-
-    if (req_val == 0){
-        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NCB_B));
-    }
-    else{
-        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RCB_B));
-    }
-
-    CHECK_ERR(compileCode(F_ARGS(expr), req_val))
-
-    assert_ret(programDescendLvl(objs, pos),-1);
-    pos->lvl--;
-    
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_CB_E, 0, req_val));
-    return ret;
-}
-
-static int compileFuncDef(F_DEF_ARGS) {
-    int ret = 0, c_ret = 0;
-
-    assert(expr);
-    assert(expr->data.type == EXPR_OP);
-    assert(expr->data.op == EXPR_O_FDEF);
-
-    if (!(expr->right) || (expr->right->data.type != EXPR_OP) || (expr->right->data.op != EXPR_O_SEP)) {
-        COMPILATION_ERROR("Sep needed\n");
-        return 1;
-    }
-    if (!(expr->right->left) || (expr->right->left->data.type != EXPR_VAR)) {
-        COMPILATION_ERROR("Bad func name\n");
-        return 1;
-    }
-    CHECK_BOOL(emmitSetSection(out, "funcs"));
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_ADDSF));
-
-    FuncData func = {};
-    func.attr.acc_type = VAL_ACC_VOLATILE;
-    func.attr.varfunc = false;
-    func.attr.arg_cnt = VF_VAL_NONE;
-    func.attr.ret_cnt = VF_VAL_NONE;
-
-    CHECK_BOOL(programCreateFunc(objs, pos, expr->right->left->data.name, &func, false));
-
-    CHECK_ERR(compileCodeBlock(F_ARGS(expr->right->right), req_val));
-
-    CHECK_BOOL(emmitRetInstruction(out, 0, true));
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RMSF));
-    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_SECT_E));
-    return true;
-}
-
 static int compileVarNode(F_DEF_ARGS, int write_c){
     int ret = 0, c_ret = 0;
     VarEntry* var = varTableGet(objs->vars, expr->data.name);
@@ -228,6 +157,27 @@ static int compileKVarNode(F_DEF_ARGS, int write_c) {
         CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_BAD));
         return ret;
     }
+    if (expr->data.kword == EXPR_KW_EXIT){
+        if (write_c == 0){
+            CHECK_BOOL(emmitConstInstruction(out, 0));
+        }
+        if (write_c > 1) {
+            COMPILATION_WARN("More than 1 value passed to exit. Using first.\n");
+            for (int i = 1; i < write_c; i++) {
+                CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_POP));
+            }
+        }
+
+        CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_END));
+        if (req_val > 0) {
+            COMPILATION_WARN("Values requested from exit. Ofc it does not matter, but these values don't exist.\n");
+            CHECK_BOOL(emmitConstInstruction(out, 0));
+            for (int i = 1; i < req_val; i++) {
+                CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DUP));
+            }
+        }
+        return ret;
+    }
 
     COMPILATION_ERROR("Bad KW\n")
     return 1;
@@ -244,6 +194,56 @@ static int compileConstNode(F_DEF_ARGS) {
         CHECK_BOOL(emmitGenericInstruction(out, COUT_GINSTR_DUP));
     }
     return 0;
+}
+
+static int compileCodeBlock(F_DEF_ARGS, bool force = false){
+    if (expr == nullptr) {
+        if (req_val == 0) {
+            return 0;
+        }
+        else{
+            expr = oexpr;
+            COMPILATION_ERROR("Empty expression can not return any values\n");
+            return 1;
+        }
+    }
+
+    if (!force && (expr->data.type != EXPR_OP || expr->data.op != EXPR_O_ENDL)){
+        return compileCode(F_ARGS(expr), req_val);
+    }
+
+    int ret = 0, c_ret = 0;
+    
+    assert_ret(programAscendLvl(objs, pos), -1);
+    pos->lvl++;
+
+    char cb_end_lbl[sizeof("!EOCB_AABBCCDDEEFFGGHH!_")] = {};
+    sprintf(cb_end_lbl, "!EOCB_%lX!", pos->lbl_id);
+    size_t old_cb_id = pos->code_block_id;
+    pos->code_block_id = pos->lbl_id;
+
+    (pos->lbl_id)++;
+
+    if (req_val == 0){
+        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NCB_B));
+    }
+    else{
+        CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RCB_B));
+    }
+
+    CHECK_BOOL(emmitTablePrototype(out, cb_end_lbl))
+    CHECK_ERR (compileCode(F_ARGS(expr), req_val))
+    CHECK_BOOL(emmitTableLbl(out, cb_end_lbl))
+
+    assert_ret(programDescendLvl(objs, pos),-1);
+    pos->lvl--;
+    
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_CB_E, 0, req_val));
+    
+
+    pos->code_block_id = old_cb_id;
+
+    return ret;
 }
 
 static int compileSetDst(F_DEF_ARGS, int write_c){
@@ -296,6 +296,127 @@ static int compileSetDst(F_DEF_ARGS, int write_c){
 
     COMPILATION_ERROR("Bad set target\n");
     return 1;
+}
+
+static int compileCommaList(F_DEF_ARGS, int write_c, int* cnt) {
+    if (!expr){
+        COMPILATION_WARN("Empty elem in comma-separated list. Ignoring")
+        return 0;
+    }
+    if (expr->data.type != EXPR_OP || expr->data.op != EXPR_O_COMMA) {
+        (*cnt)++;
+        return (write_c == 0) ? compileCodeBlock(F_ARGS(expr), req_val)
+                                 : compileSetDst(F_ARGS(expr), req_val, write_c);
+    }
+
+    int ret_1 = compileCommaList(F_ARGS(expr), req_val, write_c, cnt);
+    if (ret_1 < 0)
+        return ret_1;
+
+    (*cnt)++;
+    int ret_2 = (write_c == 0) ? compileCodeBlock(F_ARGS(expr->right), req_val)
+                                  : compileSetDst(F_ARGS(expr->right), req_val, write_c);
+    if (ret_2 != 0)
+        return ret_2;
+    return ret_1;
+}
+
+static int compileFuncDefArgs(F_DEF_ARGS_BASE, int* arg_cnt){
+    int ret = 0, c_ret = 0;
+    if (expr->data.type != EXPR_OP || expr->data.op != EXPR_O_COMMA) {
+        if (expr->data.type == EXPR_VAR) {
+            VarData var_data = {};
+            var_data.bsize = 1;
+            var_data.elcnt = 1;
+            var_data.attr = {VAL_ACC_NORMAL, true, false, false};
+            CHECK_BOOL(programCreateVar(objs, pos, expr->data.name, &var_data, false))
+            CHECK_BOOL(emmitTableConstant(out, var_data.lbl, sizeof(COMPILER_NATIVE_TYPE)*(*arg_cnt)));
+            (*arg_cnt)++;
+            return ret;
+        }
+        COMPILATION_ERROR("Bad elem in func args\n");
+    }
+    CHECK_ERR(compileFuncDefArgs(F_ARGS(expr->left ), arg_cnt))
+    CHECK_ERR(compileFuncDefArgs(F_ARGS(expr->right), arg_cnt))
+    return ret;
+}
+
+static int compileFuncDef(F_DEF_ARGS) {
+    int ret = 0, c_ret = 0;
+    if (req_val != 0) {
+        COMPILATION_ERROR("Func def can not return value");
+        ret = 1;
+    }
+
+    assert(expr);
+    assert(expr->data.type == EXPR_OP);
+    assert(expr->data.op == EXPR_O_FDEF);
+
+    if (!(expr->right) || (expr->right->data.type != EXPR_OP) || (expr->right->data.op != EXPR_O_SEP)) {
+        COMPILATION_ERROR("Sep needed\n");
+        return 1;
+    }
+    if (!(expr->left) || (expr->left->data.type != EXPR_VAR)) {
+        COMPILATION_ERROR("Bad func name\n");
+        return 1;
+    }
+    FuncData func = {};
+    func.attr.acc_type = VAL_ACC_VOLATILE;
+    func.attr.varfunc = false;
+    func.attr.arg_cnt = VF_VAL_NONE;
+    func.attr.ret_cnt = VF_VAL_NONE;
+
+    CHECK_BOOL(programCreateFunc(objs, pos, expr->left->data.name, &func, false));
+
+    FuncEntry* entry = funcTableGetLast(objs->funcs);
+
+    CHECK_BOOL(emmitTablePrototype(out, entry->value.lbl));
+    CHECK_BOOL(emmitSetSection(out, "funcs"));
+    CHECK_BOOL(emmitTableLbl(out, entry->value.lbl));
+    size_t func_header_offset = out->size; // currently arg count is unknown, need to modify it later
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_ADDSF, 0, 0));
+    
+    if (expr->right->left) {
+        int argc = 0;
+        CHECK_ERR(compileFuncDefArgs(F_ARGS(expr->right->left), &argc));
+        ((CompilerInstrHeader*)(((char*)out->data) + func_header_offset))->retc = argc;
+        if (argc == 1){
+            entry->value.attr.arg_cnt = VF_VAL_SINGLE;
+        }
+        if (argc > 1){
+            entry->value.attr.arg_cnt = VF_VAL_MULTI;
+        }
+    }
+
+    CHECK_ERR(compileCodeBlock(F_ARGS(expr->right->right), req_val));
+
+    CHECK_BOOL(emmitRetInstruction(out, 0, true));
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_RMSF));
+    CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_SECT_E));
+    return ret;
+}
+
+
+
+static int compileFuncCall(F_DEF_ARGS){
+    int ret = 0, c_ret = 0;
+    assert(expr);
+    assert(expr->data.type == EXPR_FUNC);
+    CHECK_BOOL(expr->data.name);
+
+    int arg_cnt = 0;
+    if (expr->right){
+        CHECK_ERR (compileCommaList(F_ARGS(expr->right), 1, 0, &arg_cnt));
+    }
+    FuncEntry* func = programGetFunc(objs, pos, {expr->data.name, arg_cnt, req_val, false});
+    if (!func) {
+        COMPILATION_ERROR("Function %s undefined\n", expr->data.name);
+        return 1;
+    }
+
+    CHECK_BOOL(emmitCallInstruction(out, arg_cnt, req_val, func->value.lbl));
+
+    return ret;
 }
 
 static int compileAssignment(F_DEF_ARGS){
@@ -457,8 +578,9 @@ static int compileMiscOp(F_DEF_ARGS){
     int ret = 0, c_ret = 0;
 
     if (expr->data.op == EXPR_O_IF) {
-        char* if_end_lbl = (char*)calloc(strlen("IF_AABBCCDDEEFFGGHH_END."), sizeof(char));
-        sprintf(if_end_lbl, "IF_%lX_END", pos->lbl_id);
+        char if_end_lbl[sizeof("!IF_AABBCCDDEEFFGGHH_END.")] = {};
+        sprintf(if_end_lbl, "!IF_%lX_END", pos->lbl_id);
+        (pos->lbl_id)++;
         compilerFlagCondition_t flags = COUT_FLAGS_NVR;
         CHECK_ERR (compileLogicalExpr(F_ARGS(expr->left), &flags));
 
@@ -468,7 +590,26 @@ static int compileMiscOp(F_DEF_ARGS){
         CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 0, true))
         CHECK_BOOL(emmitTableLbl(out, if_end_lbl));
         CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_NONLIN_E));
+        return ret;
+    }
 
+    if (expr->data.op == EXPR_O_WHILE) {
+        char while_beg_lbl[sizeof("!WHL_AABBCCDDEEFFGGHH_BEG.")] = {};
+        char while_mid_lbl[sizeof("!WHL_AABBCCDDEEFFGGHH_MID.")] = {};
+        sprintf(while_beg_lbl, "!WHL_%lX_BEG", pos->lbl_id);
+        sprintf(while_mid_lbl, "!WHL_%lX_MID", pos->lbl_id);
+        (pos->lbl_id)++;
+
+        CHECK_BOOL(emmitTablePrototype(out, while_mid_lbl));
+        CHECK_BOOL(emmitJumpInstruction_l(out, COUT_FLAGS_ALW, {}, while_mid_lbl))
+        CHECK_BOOL(emmitTableLbl(out, while_beg_lbl));
+
+        CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 0, true))
+
+        CHECK_BOOL(emmitTableLbl(out, while_mid_lbl));
+        compilerFlagCondition_t flags = COUT_FLAGS_NVR;
+        CHECK_ERR (compileLogicalExpr(F_ARGS(expr->left), &flags));
+        CHECK_BOOL(emmitJumpInstruction_l(out, flags, {}, while_beg_lbl))
         return ret;
     }
 
@@ -496,6 +637,9 @@ static int compileCode(F_DEF_ARGS){
     if (expr->data.type == EXPR_KVAR)
         return compileKVarNode(F_ARGS(expr), req_val, 0);
 
+    if (expr->data.type == EXPR_FUNC)
+        return compileFuncCall(F_ARGS(expr), req_val);
+
     if (expr->data.type == EXPR_OP){
         if (isMathOp(expr->data.op))
             return compileMathOp(F_ARGS(expr), req_val);
@@ -514,6 +658,8 @@ static int compileCode(F_DEF_ARGS){
                 return ret;
             case EXPR_O_VDEF:
                 return compileVarDef(F_ARGS(expr->right), 0);
+            case EXPR_O_FDEF:
+                return compileFuncDef(F_ARGS(expr), 0);
             default:
                 return compileMiscOp(F_ARGS(expr), req_val);
         }
@@ -530,7 +676,9 @@ int compileProgram(CompilationOutput* out, BinTreeNode* code) {
     programNameTableCtor(&objs);
     programPosDataCtor(&pos);
 
-    CHECK_BOOL(emmitAddSection(out, "main", BIN_SECTION_PRESET_MAIN)); // register main code section
+    CHECK_BOOL(emmitAddSection(out, "main" , BIN_SECTION_PRESET_MAIN)); // register main code section
+    CHECK_BOOL(emmitAddSection(out, "funcs", BIN_SECTION_PRESET_FUNC)); // register main code section
+    
     CHECK_BOOL(emmitSetSection(out, "main"));                          // set as current
     CHECK_BOOL(emmitStructuralInstruction(out, COUT_STRUCT_ADDSF));    // set stack frame
 

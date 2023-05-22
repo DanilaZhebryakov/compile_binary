@@ -132,7 +132,7 @@ bool emmitRetInstruction(CompilationOutput* out, int retc, bool retf) {
 bool emmitCallInstruction(CompilationOutput* out, int argc, int retc, const char* name) {
     compilerSpecialInstr_t instr = COUT_SPEC_CALL;
     int name_len = strlen(name);
-    CompilerInstrHeader header = {sizeof(header) + sizeof(instr) + name_len , argc , retc, false, COUT_TYPE_SPECIAL};
+    CompilerInstrHeader header = {sizeof(header) + sizeof(instr) + name_len + 1 , argc , retc, false, COUT_TYPE_SPECIAL};
 
     if (!EXPAND_COMPILATION_OUTPUT(out, &header))
         return false;

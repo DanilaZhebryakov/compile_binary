@@ -135,6 +135,9 @@ void printSpecialInstr(FILE* file, void* instr_ptr, void* end_ptr){
         case COUT_SPEC_RETF:
             fputs("RetFunc", file); 
             break;
+        case COUT_SPEC_CALL:
+            fprintf(file, "Call \"%.*s\"", SIZE_LEFT_I , (char*)instr_ptr);
+            break;
         default:
             fputs("UNDEFINED", file);
             break;
@@ -164,6 +167,7 @@ void printCompilerInstruction(FILE* file, void* instr_ptr){
         case COUT_TYPE_JMP:
             CHK_SIZE_ENOUGH(compilerFlagCondition_t)
             fprintf(file, "%s ", flag_cond_info[*((compilerFlagCondition_t*)instr_ptr)].name);
+            instr_ptr = ((char*)instr_ptr) + sizeof(compilerFlagCondition_t);
             /* FALLTHRU */
         case COUT_TYPE_LOAD:
             /* FALLTHRU */
@@ -199,6 +203,6 @@ void printCompilerOutput(FILE* file, CompilationOutput* out){
         next_instr_ptr = ((char*)curr_instr_ptr) + ((CompilerInstrHeader*)curr_instr_ptr)->size;
     }
     if (next_instr_ptr != curr_instr_ptr){
-        fprintf(file, "Data ended incorrectly: instruction at (%ld/%ld) bytes over the end\n", (char*)curr_instr_ptr - ((char*)data_end), (char*)curr_instr_ptr - ((char*)data_end));
+        fprintf(file, "Data ended incorrectly: instruction at (%ld/%ld) bytes over the end\n", ((char*)data_end) - (char*)curr_instr_ptr, (char*)next_instr_ptr - ((char*)data_end));
     }
 }

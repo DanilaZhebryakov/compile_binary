@@ -62,6 +62,7 @@ void execOutDtor(ExecOutput* out){
     relocationTableDtor(&(out->sym_pre_tbl));
     cmpoutSymTableDtor(&(out->syms));
     ustackDtor(&(out->context_stk));
+    ustackDtor(&(out->sym_pre_data));
 
     if (out->sect_count > 0){
         for (ExecOutSection* sect = out->sects; sect < out->sects + out->sect_count; sect++){
@@ -139,6 +140,7 @@ bool execoutAddSection(ExecOutput* out, const char* name, BinSectionAttr attr, s
             void* new_sects = realloc(out->sects, (out->sect_count + 1)*sizeof(*(out->sects)));
             CHECK_BOOL(new_sects)
             out->sects = (ExecOutSection*)new_sects;
+            new_sect_ptr = out->sects + out->sect_count;
             out->sect_count++;
         }
     }
@@ -168,7 +170,7 @@ bool execOutDefSym(ExecOutput* out, CmpoutSymEntry* entry){
         for (CmpoutSymEntry* i = cmpoutSymTableGetLast(&(out->syms)); i >= out->syms.data; i--) {
             if (i->value.attr.prototype && (strcmp(i->name, entry->name) == 0)) {
                 ((CmpoutSymData*)out->sym_pre_data.data)[i->value.value] = entry->value;
-                memcpy(i, entry, sizeof(*entry));
+                memcpy(&(i->value), &(entry->value), sizeof(entry->value));
                 return true;
             }
         }
@@ -194,8 +196,8 @@ bool execOutPutSym(ExecOutput* out, const char* name, int size, bool relative) {
         CHECK_BOOL(relocationTableAdd(&(out->sym_pre_tbl), &entry))
         return (execOutWriteSection(getCurrSect(out), size, nullptr, 0));
     }
-    if (sym->value.attr.relocatable && !relative) {
-        RelocationEntry entry = {out->curr_context->sect, getCurrSect(out)->size, sym->value.section_id, size};
+    if (sym->value.attr.relocatable && (!relative || sym->value.section_id != out->curr_context->sect)) {
+        RelocationEntry entry = {out->curr_context->sect, getCurrSect(out)->size, sym->value.section_id, size, false, relative};
         CHECK_BOOL(relocationTableAdd(&(out->relt), &entry))
     }
     return (execOutWriteSection(getCurrSect(out), size, &(sym->value.value), size));
@@ -222,7 +224,7 @@ bool execOutApplyPreLbls(ExecOutput* out){
         }
 
         CHECK_BOOL(relocationEntryApply(rel_e, (out->sects + rel_e->sect_id)->data, var_data->value));
-        if (var_data->attr.relocatable && !rel_e->relative) {
+        if (var_data->attr.relocatable && (!rel_e->relative || var_data->section_id != rel_e->sect_id)) {
             rel_e->relative_to = var_data->section_id;
             CHECK_BOOL(relocationTableAdd(&(out->relt), rel_e));
         }
@@ -268,8 +270,8 @@ bool execOutHandleTableInstr(ExecOutput* out, const void* instr_ptr) {
             if (out->curr_context->stk_size_beg != out->curr_context->stk_size_curr){
                 warn_log("Stack var def over data present in stack. This is most probably not ok\n");
             }
-            if (out->curr_context->type != EOUT_CONTEXT_CB) {
-                error_log("Stack vars have to be inside CB context\n");
+            if (out->curr_context->type != EOUT_CONTEXT_CB && out->curr_context->type != EOUT_CONTEXT_SF) {
+                error_log("Stack vars have to be inside CB or SF context\n");
                 return false;
             }
             out->curr_context->stk_size_curr += *(size_t*)instr_ptr;
@@ -410,7 +412,10 @@ bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, co
     
     ExecOutSection new_sect;
     new_sect.data = calloc(all_size, sizeof(char));
-    CHECK_BOOL(new_sect.data);
+    if(!new_sect.data){
+        free(sect_reloc_offs);
+        return false;
+    }
     new_sect.name = "_ALL_CODE_";
     new_sect.capacity = all_size;
     new_sect.attr = common_attr;
@@ -432,16 +437,23 @@ bool execOutPrepareCode(ExecOutput* out, const void* prefix, size_t prefsize, co
     memcpy(((char*)new_sect.data) + new_sect.size, suffix, sufsize);
     new_sect.size += sufsize;
 
-    for (RelocationEntry* rel = out->relt.data + out->relt.size; rel >= out->relt.data; rel--){
+    for (RelocationEntry* rel = out->relt.data + out->relt.size-1; rel >= out->relt.data; rel--){
         if (out->sects[rel->sect_id].attr.entry_point){
             rel->sect_id = repl_sect_id;
             rel->sect_offset += sect_reloc_offs[rel->sect_id];
             out->sects[rel->sect_id].attr.entry_point = 0;
+            if (rel->relative) {
+                long long reloc_offs = -sect_reloc_offs[rel->sect_id];
+                relocationEntryApply(rel, new_sect.data, reloc_offs);
+            }
         }
         if (out->sects[rel->relative_to].attr.entry_point){
-            relocationEntryApply(rel, out->sects[rel->sect_id].data, sect_reloc_offs[rel->relative_to]);
+            size_t reloc_offs = sect_reloc_offs[rel->relative_to];
+            relocationEntryApply(rel, out->sects[rel->sect_id].data, reloc_offs);
+            rel->relative_to = repl_sect_id;
         }
     }
     memcpy(replaced_sect, &new_sect, sizeof(new_sect));
+    free(sect_reloc_offs);
     return true;
 }

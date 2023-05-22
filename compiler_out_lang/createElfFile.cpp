@@ -153,7 +153,7 @@ int writeElfFile(ExecOutput*  out, FILE* file) {
     uint64_t curr_file_offset = sect_place_offset;
     size_t   curr_mem_addr    = sect_place_offset + prog_start_addr;
 
-    int segs_used = 1 + composeSegments(out, prog_hdrs, sect_offs, sect_addr, &curr_mem_addr, &curr_file_offset, &(header.e_entry));
+    int segs_used = 1 + composeSegments(out, prog_hdrs+1, sect_offs, sect_addr, &curr_mem_addr, &curr_file_offset, &(header.e_entry));
     if (segs_used < 1) {
         free(prog_hdrs);
         free(sect_offs);
@@ -205,7 +205,7 @@ int writeElfFile(ExecOutput*  out, FILE* file) {
                                | (out->sects[i].attr.executable ? SHF_EXECINSTR : 0)
                                | (out->sects[i].attr.writable   ? SHF_WRITE     : 0);
         sect_hdrs[i].sh_addr = sect_addr[i];
-        sect_hdrs[i].sh_size = prog_hdrs[out->sect_count].p_filesz;
+        sect_hdrs[i].sh_size = out->sects[i].size;
         sect_hdrs[i].sh_addralign = 0;
         if (out->sects[i].attr.entry_point) {
             curr_shstr_pos += strlen(entryp_sect_str)+1;
@@ -275,7 +275,7 @@ int writeElfFile(ExecOutput*  out, FILE* file) {
         }
     }
 
-    if (fprintf(file, "%s%c", shstr_sect_str, 0)) {
+    if (fprintf(file, "%s%c", shstr_sect_str, 0) < 0) {
         return -2;
     }
     return 0;
@@ -284,7 +284,7 @@ int writeElfFile(ExecOutput*  out, FILE* file) {
 int createExecElfFile(ExecOutput*  out, const char* filename) {
     FILE* file = fopen(filename, "w");
     if (!file)
-        return false;
+        return 2;
     int ret = writeElfFile(out, file);
     fclose(file);
     return ret;

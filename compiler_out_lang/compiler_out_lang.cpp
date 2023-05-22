@@ -46,6 +46,8 @@ const char* getInstrTypeName(compilerInstrType_t type){
             return "Table  ";
         case COUT_TYPE_STRUCT:
             return "Struct ";
+        case COUT_TYPE_SPECIAL:
+            return "Special ";
         default:
             return "UNDEFINED";
     }

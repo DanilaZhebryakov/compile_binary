@@ -44,7 +44,7 @@ static const InstructionBinCode ginstrBinCodes[] = {
     {6, "\x5a\x58\x48\x01\xd0\x50"}, //pop rdx, pop rax, add, push rax
     {6, "\x5a\x58\x48\x29\xd0\x50"}, //pop rdx, pop rax, sub, push rax
     {9, "\x59\x58\x48\x31\xd2\x48\xf7\xe1\x50"}, //pop, pop, xor, mul, push
-    {9, "\x59\x58\x48\x31\xd2\x48\xf7\xf1\x50"}, //pop, pop, xor, mul, push
+    {9, "\x59\x58\x48\x31\xd2\x48\xf7\xf1\x50"}, //pop, pop, xor, div, push
     {12,"\x48\x89\xEC\x5d\xb8\x3c\x00\x00\x00\x5f\x0f\x05"}, //exit (pop)
     {3, "\xff\x34\x24"}, //push qword(rsp)
     {4, "\x48\x83\xC4\x08"}, // add rsp,8
@@ -57,8 +57,8 @@ static const InstructionBinCode ginstrBinCodes[] = {
 const int g_instr_cnt = sizeof(ginstrBinCodes) / sizeof(InstructionBinCode);
 
 static const InstructionBinCode longJmpBinCodes[] = {
-    {1, "\xE9"},
     {1, "\x3D"}, // actually "cmp eax, imm32" , but this is good 'nop' for this case
+    {1, "\xE9"},
     {2, "\x0F\x84"},
     {2, "\x0F\x85"},
     {2, "\x0F\x8F"},
@@ -68,8 +68,8 @@ static const InstructionBinCode longJmpBinCodes[] = {
 };
 
 static const InstructionBinCode shortJmpBinCodes[] = {
-    {1, "\xE9"},
     {1, "\x3C"}, // actually "cmp al, imm8" , but this is good 'nop' for this case
+    {1, "\xEB"},
     {1, "\x74"},
     {1, "\x75"},
     {1, "\x7F"},
@@ -99,28 +99,28 @@ int arg_reg_cnt = sizeof(arg_reg_n);
 static bool addArgRetEncode(ExecOutput* out, int count, bool ret) {
     assert(count <= (arg_reg_cnt - !ret));
     if (!ret) {
-        CHECK_BOOL(execOutPutData(out, "\x48\x31\x00", 1));
+        CHECK_BOOL(execOutPutData(out, "\x48\x31\x00", 1)); //xor rax, rax (bc calling convention)
     }
-    for (int i = !ret; i < count; i++) {
+    for (int i = count+!ret-1; i >= !ret; i--) {
         if (arg_reg_n[i] & 0x8){
             CHECK_BOOL(execOutPutData(out, "\x41", 1)); // rex prefix if needed
         }
         char op = 0x58;
         op += (arg_reg_n[i] & 0x7);
-        CHECK_BOOL(execOutPutData(out, &op, 1));
+        CHECK_BOOL(execOutPutData(out, &op, 1)); //pop <arg_reg_n[i]>
     }
     return true;
 }
 
 static bool addArgRetDecode(ExecOutput* out, int count, bool ret) {
     assert(count <= (arg_reg_cnt - !ret));
-    for (int i = !ret; i < count; i++) {
+    for (int i = !ret; i < count+!ret; i++) {
         if (arg_reg_n[i] & 0x8){
             CHECK_BOOL(execOutPutData(out, "\x41", 1)); // rex prefix if needed
         }
         char op = 0x50;
         op += (arg_reg_n[i] & 0x7);
-        CHECK_BOOL(execOutPutData(out, &op, 1));
+        CHECK_BOOL(execOutPutData(out, &op, 1)); //push <arg_reg_n[i]>
     }
     return true;
 }
@@ -165,7 +165,7 @@ static bool translateMemInstr(ExecOutput* out, const void* arg_ptr, char opcode,
     }
     
     if (attr.lbl) {
-        return execOutPutSym(out, (const char*)arg_ptr, 4); //iiuc displ32 is valid here, not 64
+        return execOutPutSym(out, (const char*)arg_ptr, 4);
     }
     else {
         return execOutPutData(out, arg_ptr, 4);
@@ -340,10 +340,13 @@ static bool translateStructInstr(ExecOutput* out, void* instr_ptr) {
 static bool translateSpecialInstr(ExecOutput* out, void* instr_ptr) {
     CompilerInstrHeader* header = ((CompilerInstrHeader*)instr_ptr);
     DEF_END_PTR()
+    instr_ptr = ((char*)instr_ptr) + sizeof(*header);
     CHK_SIZE_ENOUGH(compilerSpecialInstr_t)
-    compilerSpecialInstr_t instr = *(compilerSpecialInstr_t*)(((char*)instr_ptr) + sizeof(*header));
+    compilerSpecialInstr_t instr = *(compilerSpecialInstr_t*)(instr_ptr);
+    instr_ptr = ((char*)instr_ptr) + sizeof(instr);
     if (instr == COUT_SPEC_RETCB) {
         CHECK_BOOL(addArgRetEncode(out, header->argc, true));
+        assert(out->curr_context->stk_size_beg == out->curr_context->stk_size_curr); //NYI
         char lbl[16] = {};
         sprintf(lbl, "EOCB%d", 1);
         CHECK_BOOL(execOutPutData(out, "\xE9", 1));
@@ -352,11 +355,11 @@ static bool translateSpecialInstr(ExecOutput* out, void* instr_ptr) {
     }
     if (instr == COUT_SPEC_RETF) {
         CHECK_BOOL(addArgRetEncode(out, header->argc, true));
-        return execOutPutData(out, "\xC3", 1);
+        return execOutPutData(out, "\xC9\xC3", 2);//leave; ret
     }
     if (instr == COUT_SPEC_CALL) {
         CHECK_BOOL(addArgRetEncode(out, header->argc, false));
-        CHECK_BOOL(execOutPutData (out, "\xE8", 1));
+        CHECK_BOOL(execOutPutData (out, "\xE8", 1)); 
         long long rel_base = -((out->sects + out->curr_context->sect)->size + 4);
         CHECK_BOOL(execOutPutOffsSym(out, (const char*)instr_ptr, &rel_base, 4, true));
         return addArgRetDecode(out, header->retc, true);
