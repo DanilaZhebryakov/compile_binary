@@ -4,6 +4,7 @@
 #include "compiler_out_lang/compiler_out_dump.h"
 
 #include "bool_check_define.h"
+#include "instr_bin_codes.h"
 
 //#define DEBUG_MODE
 
@@ -32,51 +33,6 @@
         return false; \
     } \
 }
-
-struct InstructionBinCode {
-    size_t size;
-    const char* data;
-};
-
-static const InstructionBinCode ginstrBinCodes[] = {
-    {1, "\xF1"}, //invalid
-    {1, "\x90"}, //nop
-    {6, "\x5a\x58\x48\x01\xd0\x50"}, //pop rdx, pop rax, add, push rax
-    {6, "\x5a\x58\x48\x29\xd0\x50"}, //pop rdx, pop rax, sub, push rax
-    {9, "\x59\x58\x48\x31\xd2\x48\xf7\xe1\x50"}, //pop, pop, xor, mul, push
-    {9, "\x59\x58\x48\x31\xd2\x48\xf7\xf1\x50"}, //pop, pop, xor, div, push
-    {12,"\x48\x89\xEC\x5d\xb8\x3c\x00\x00\x00\x5f\x0f\x05"}, //exit (pop)
-    {3, "\xff\x34\x24"}, //push qword(rsp)
-    {4, "\x48\x83\xC4\x08"}, // add rsp,8
-    {22,"\x6A\x00\xb8\0\0\0\0\xBF\0\0\0\0\x48\x89\xE6\xBA\x01\0\0\0\x0F\x05"}, // in
-    {24,"\xB8\x01\0\0\0\xBF\x01\0\0\0\x48\x89\xE6\xBA\x01\0\0\0\x0F\x05\x48\x83\xC4\x08"}, //out
-    {1 ,"\xCC"}, //int 3 (trap)
-    {5 ,"\x5a\x58\x48\x39\xd0"}, //cmp
-    {5 ,"\x5a\x58\x48\x85\xd0"} //test
-};
-const int g_instr_cnt = sizeof(ginstrBinCodes) / sizeof(InstructionBinCode);
-
-static const InstructionBinCode longJmpBinCodes[] = {
-    {1, "\x3D"}, // actually "cmp eax, imm32" , but this is good 'nop' for this case
-    {1, "\xE9"},
-    {2, "\x0F\x84"},
-    {2, "\x0F\x85"},
-    {2, "\x0F\x8F"},
-    {2, "\x0F\x8E"},
-    {2, "\x0F\x8D"},
-    {2, "\x0F\x8C"},
-};
-
-static const InstructionBinCode shortJmpBinCodes[] = {
-    {1, "\x3C"}, // actually "cmp al, imm8" , but this is good 'nop' for this case
-    {1, "\xEB"},
-    {1, "\x74"},
-    {1, "\x75"},
-    {1, "\x7F"},
-    {1, "\x7E"},
-    {1, "\x7D"},
-    {1, "\x7C"},
-};
 
 static bool translateGenericInstr(ExecOutput* out, void* instr_ptr) {
     CompilerInstrHeader* header = ((CompilerInstrHeader*)instr_ptr);

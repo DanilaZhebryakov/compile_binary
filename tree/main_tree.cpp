@@ -20,12 +20,14 @@ const char* const help_str =
 "If no output filename is specified, it is the same as input, but with \"" LANG_TREE_PRE_FILE_EXTENSION "\" extension\n"
 "If no files are specified, defaults to \"" LANG_TREE_PRE_DEFAULT_FILE "\" \n"
 "-D  : Dump output. Print output in text format to stdout. Useful for debugging\n"
+"-c  : Compile to compiler out lang only. Do not translate.\n"
 "-S  : use stdin and stdout as in and out files \n"
 DEFAULT_ARG_DESCRIPTION
 ;
 
 struct BackendRunFlags{
     bool out_dump:1;
+    bool compile_only:1;
 };
 
 int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
@@ -55,7 +57,7 @@ int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
         execOutApplyPreLbls(&exec);
         if (execOutPrepareCode(&exec, "", 0, x86_jit_suffix, sizeof(x86_jit_suffix))) {
             //execOutputJitRun(&exec);
-            if (createExecElfFile(&exec, "Program") == 0) {
+            if (writeElfFile(&exec, out_file) == 0) {
                 printf("ELF Success\n");
             }
             else {
@@ -83,7 +85,8 @@ int processFile(const char* input_filename, const char* out_filename, BackendRun
     bool alloc_str = false;
     if (!out_filename){
         alloc_str = true;
-        out_filename = repl_file_extension(input_filename, LANG_CMPOUT_FILE_EXTENSION);
+        const char* result_extension = flags.compile_only ? LANG_CMPOUT_FILE_EXTENSION : "";
+        out_filename = repl_file_extension(input_filename, result_extension);
     }
     IF_VB(fprintf(stderr, "Output: %s\n", out_filename);)
 
@@ -121,7 +124,8 @@ int main(int argc, const char* argv[]){
 
     BackendRunFlags flags = {};
 
-    flags.out_dump = parseArgBegin(argc, argv, "-D") >= 0;
+    flags.out_dump     = parseArgBegin(argc, argv, "-D") >= 0;
+    flags.compile_only = parseArgBegin(argc, argv, "-c") >= 0;
     
     int file_counter = 0;
 
