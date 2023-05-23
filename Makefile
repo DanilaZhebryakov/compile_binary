@@ -19,6 +19,10 @@ TREE_RUN_FILE := run/Tree
 
 X86_64_SRC := $(wildcard toasm_x86_64/*.cpp)
 
+MAIN_TREE := mains/main_tree.cpp
+
+MAIN_TREE_OBJ := $(call OBJ_FUNC, $(MAIN_TREE))
+
 .PHONY: all run clean libs tree
 
 all: libs tree
@@ -39,8 +43,8 @@ run:
 OBJECTS_X86_64 := $(call OBJ_FUNC, $(X86_64_SRC))
 
 OBJECTST := $(call OBJ_FUNC, $(COMMON_SRC) $(TREE_SRC))
-$(TREE_RUN_FILE): libs $(OBJECTST) $(OBJECTS_X86_64)
-	$(CC) $(LIB_OBJ) $(OBJECTST) $(OBJECTS_X86_64) -o $@ $(LFLAGS)
+$(TREE_RUN_FILE): libs $(OBJECTST) $(OBJECTS_X86_64) $(MAIN_TREE_OBJ)
+	$(CC) $(LIB_OBJ) $(OBJECTST) $(OBJECTS_X86_64) $(MAIN_TREE_OBJ) -o $@ $(LFLAGS)
 
 
 $(OBJDIR)/%.d : %.cpp

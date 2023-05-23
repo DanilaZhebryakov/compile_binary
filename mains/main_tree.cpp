@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "compile_backend.h"
+#include "tree/compile_backend.h"
 #include "compiler_out_lang/compiler_out_dump.h"
 #include "compiler_out_lang/jit_run.h"
 #include "compiler_out_lang/createElfFile.h"
+#include "compiler_out_lang/fileworks.h"
 #include "toasm_x86_64/genExecCode.h"
 
 #include "expr/formule_utils.h"
@@ -51,28 +52,31 @@ int processFile(FILE* tree_file, FILE* out_file, BackendRunFlags flags){
         printf("\n\n");
     }
 
-    ExecOutput exec = {};
-    execOutCtor(&exec);
-    if (translateCompilerOutput_x86_64(&exec, &cmp_out)) {
-        execOutApplyPreLbls(&exec);
-        if (execOutPrepareCode(&exec, "", 0, x86_jit_suffix, sizeof(x86_jit_suffix))) {
-            //execOutputJitRun(&exec);
-            if (writeElfFile(&exec, out_file) == 0) {
-                printf("ELF Success\n");
-            }
-            else {
-                printf("ELF Fail\n");
-            }
-        }
-        else{
-            printf("code prepare failed\n");
+    if (flags.compile_only) {
+        if (writeCompileOutFile(&cmp_out, out_file) != 0) {
+            printf("Compile output write fail\n");
         }
     }
-    else {
-        printf("translation failed\n");
+    else{
+        ExecOutput exec = {};
+        execOutCtor(&exec);
+        if (translateCompilerOutput_x86_64(&exec, &cmp_out)) {
+            execOutApplyPreLbls(&exec);
+            if (execOutPrepareCode(&exec, "", 0, x86_jit_suffix, sizeof(x86_jit_suffix))) {
+                //execOutputJitRun(&exec);
+                if (writeElfFile(&exec, out_file) != 0) {
+                    printf("ELF fail\n");
+                }
+            }
+            else{
+                printf("code prepare failed\n");
+            }
+        }
+        else {
+            printf("translation failed\n");
+        }
+        execOutDtor(&exec);
     }
-
-    execOutDtor(&exec);
     compilationOutputDtor(&cmp_out);
 
     binTreeDtor(prog);
