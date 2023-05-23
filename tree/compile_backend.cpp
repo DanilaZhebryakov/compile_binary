@@ -21,17 +21,17 @@
 }
 
 #define CHECK_BOOL(...) { \
-    if(!(__VA_ARGS__)) {          \
+    if(!(__VA_ARGS__)) {  \
         error_log("Fail: %d %s", __LINE__, #__VA_ARGS__);\
         return -1;        \
     }                     \
 }
 
-#define COMPILATION_ERROR(...) \
-{error_log(__VA_ARGS__);        \
-printf_log("at:'");           \
-printExprElem(stderr  , expr->data);\
-printExprElem(_logfile, expr->data);\
+#define COMPILATION_ERROR(...)          \
+{error_log(__VA_ARGS__);                \
+printf_log("at:'");                     \
+printExprElem(stderr  , expr->data);    \
+printExprElem(_logfile, expr->data);    \
 printf_log("' (%s:%d:%d)\n", expr->data.file_name, expr->data.file_line, expr->data.line_pos);\
 }
 
@@ -276,6 +276,18 @@ static int compileSetDst(F_DEF_ARGS, int write_c){
                 CHECK_ERR(compileSetDst(F_ARGS(expr->left), req_val, write_c))
                 CHECK_ERR(compileSetDst(F_ARGS(expr->left), 0      , write_c))
                 break;
+            case EXPR_O_DEREF:
+                CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 1))
+                if (write_c > 0 && req_val > 0) {
+                    COMPILATION_ERROR("NYI\n")
+                    return 1;
+                }
+                if (write_c > 1 || req_val > 1) {
+                    COMPILATION_ERROR("NYI\n")
+                    return 1;
+                }
+                CHECK_BOOL(emitMemInstruction(out, {.mod_arg=1}, write_c > 0, 0))
+                
             default:
             COMPILATION_ERROR("Incorrect op for assignment target\n")
             return 1;
@@ -600,7 +612,9 @@ static int compileMiscOp(F_DEF_ARGS){
         sprintf(while_mid_lbl, "!WHL_%lX_MID", pos->lbl_id);
         (pos->lbl_id)++;
 
+        
         CHECK_BOOL(emitTablePrototype(out, while_mid_lbl));
+        CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_NONLIN_B));
         CHECK_BOOL(emitJumpInstruction_l(out, COUT_FLAGS_ALW, {}, while_mid_lbl))
         CHECK_BOOL(emitTableLbl(out, while_beg_lbl));
 
@@ -610,8 +624,17 @@ static int compileMiscOp(F_DEF_ARGS){
         compilerFlagCondition_t flags = COUT_FLAGS_NVR;
         CHECK_ERR (compileLogicalExpr(F_ARGS(expr->left), &flags));
         CHECK_BOOL(emitJumpInstruction_l(out, flags, {}, while_beg_lbl))
+        CHECK_BOOL(emitStructuralInstruction(out, COUT_STRUCT_NONLIN_E));
         return ret;
     }
+    if (expr->data.op == EXPR_O_DEREF) {
+        CHECK_ERR (compileCodeBlock(F_ARGS(expr->right), 1))
+        CHECK_BOOL(emitMemInstruction(out, {.mod_arg=1}, false, 0))
+        for(int i = 1; i < req_val; i++) {
+            CHECK_BOOL(emitGenericInstruction(out, COUT_GINSTR_DUP));
+        }
+    }
+
 
     COMPILATION_ERROR("Unknown misc op for code: %s\n", exprOpName(expr->data.op));
     return false;
